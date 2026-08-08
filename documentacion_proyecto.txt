@@ -1,0 +1,92 @@
+================================================================================
+                    MANUAL DE USUARIO Y DOCUMENTACIÓN TÉCNICA
+                               CLEMENCIA APP
+================================================================================
+
+1. ARQUITECTURA GENERAL
+--------------------------------------------------------------------------------
+La aplicación está construida con React (Vite) en el Frontend y utiliza Supabase 
+como su servicio de Backend en la nube (Base de Datos, Autenticación y Storage).
+Toda la información es persistente, segura y sincronizada en tiempo real.
+
+Base de Datos Principal: Supabase (PostgreSQL).
+Inteligencia Artificial: Google Gemini Pro.
+
+--------------------------------------------------------------------------------
+2. MÓDULOS DE LA APLICACIÓN
+--------------------------------------------------------------------------------
+
+A. MÓDULO DE INVENTARIO Y BODEGA
+- Propósito: Controlar el stock de alimentos, trazabilidad y caducidad.
+- Opciones y Características:
+  * Añadir Productos: Permite registrar alimentos. El sistema cuenta con 
+    inteligencia anti-duplicados que reconoce singulares y plurales (ej. 
+    "Manzana" y "Manzanas") para no crear basura en la base de datos.
+  * Gestión de Lotes: Cada ingreso genera un lote con Fecha de Vencimiento.
+  * Transacciones: Puedes registrar Entradas (compras) y Salidas (consumo).
+  * Validación estricta: No permite sacar más stock del que existe ni mezclar 
+    unidades de medida incompatibles.
+- Origen de datos: Tablas 'alimentos', 'lotes' y 'transacciones' en Supabase.
+
+B. MÓDULO DE PACIENTES
+- Propósito: Registrar a los pacientes o comensales y sus necesidades médicas.
+- Opciones y Características:
+  * Ficha Médica: Registra nombres, edad, peso, talla.
+  * Sintomatologías Dinámicas: Permite seleccionar las condiciones clínicas del 
+    paciente. Las opciones (ej. Diabetes, Hipertensión) no están estáticas en 
+    el código, sino que se alimentan directamente de la tabla 'sintomatologias' 
+    de Supabase. Esto permite agregar nuevas enfermedades desde la base de datos 
+    sin reprogramar la app.
+- Origen de datos: Tablas 'pacientes' y 'sintomatologias' en Supabase.
+
+C. MÓDULO DE RECETAS E INTELIGENCIA ARTIFICIAL
+- Propósito: Crear menús nutricionales precisos y almacenar recetas estandarizadas.
+- Integración de IA (Google Gemini):
+  * ¿Para qué se usa?: Se utiliza para generar recetas personalizadas y altamente 
+    detalladas tomando en cuenta los ingredientes disponibles en bodega y las 
+    restricciones médicas (Sintomatologías) del paciente.
+  * ¿Cómo funciona?: Se le envía a Gemini un "Prompt" estricto pidiendo que 
+    actúe como Nutricionista y Chef, devolviendo un formato JSON puro con 
+    cantidades, macros (proteínas, carbohidratos, grasas), calorías y el 
+    procedimiento paso a paso.
+- Opciones y Características:
+  * Las recetas (tanto las creadas manualmente como las generadas por IA) se 
+    guardan de forma permanente.
+- Origen de datos: Tablas 'recetas' e 'ingredientes_receta' en Supabase. API 
+  de Google Gemini para la generación.
+
+D. MÓDULO DE GUÍAS Y PROTOCOLOS (Dietoterapia y BPM)
+- Propósito: Servir como un manual de consulta rápida para el equipo de cocina 
+  sobre Buenas Prácticas de Manufactura y dietas clínicas.
+- Opciones y Características:
+  * Dietoterapia Clínica: Vista en forma de lista desplegable rápida (acordeón) 
+    con terminología médica y lineamientos de dietas.
+  * Normas BPM: Vista en formato de tarjetas o "carrusel" de imágenes, similar 
+    a una red social, ideal para infografías.
+  * Carga de Archivos: Permite añadir nuevas normas subiendo múltiples imágenes, 
+    e incluso soporta pegar (Ctrl+V) capturas de pantalla desde el portapapeles.
+  * Visor: Función de pantalla completa para detallar imágenes pequeñas.
+- Origen de datos: Tabla 'guias' en Supabase. Las imágenes se guardan en el 
+  "Bucket" llamado 'guide_images' en Supabase Storage.
+
+E. MÓDULO DE INTERCAMBIOS
+- Propósito: Manejo de grupos de alimentos intercambiables (Carbohidratos, 
+  Proteínas, etc.) para crear planes de alimentación flexibles.
+- Origen de datos: Tabla 'intercambios' en Supabase.
+
+--------------------------------------------------------------------------------
+3. FLUJO DE TRABAJO TÍPICO
+--------------------------------------------------------------------------------
+1. El usuario registra los ingredientes que llegan al hospital/restaurante en el 
+   Inventario.
+2. Ingresa a un Paciente y marca que sufre de "Hipertensión".
+3. Va al Generador de Recetas por IA, selecciona los ingredientes de su inventario, 
+   selecciona al paciente hipertenso y presiona generar.
+4. Google Gemini analiza todo y crea una receta baja en sodio.
+5. El usuario aprueba la receta y se guarda en la base de datos de Supabase.
+6. Si hay dudas sobre cómo manipular un alimento de esa receta, el usuario va a 
+   la Guía BPM y revisa las infografías.
+
+================================================================================
+Documento generado automáticamente para la administración del proyecto.
+================================================================================

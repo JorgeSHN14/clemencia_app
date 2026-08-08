@@ -1,0 +1,21 @@
+[
+  { "nombre": "Arroz Integral", "grupo": "Cereales/tubérculos", "porcionesEquivalentes": "1/3 de taza" },
+  { "nombre": "Avena", "grupo": "Cereales/tubérculos", "porcionesEquivalentes": "3 cucharadas" },
+  { "nombre": "Papa", "grupo": "Cereales/tubérculos", "porcionesEquivalentes": "1 unidad pequeña" },
+  { "nombre": "Camote", "grupo": "Cereales/tubérculos", "porcionesEquivalentes": "1/3 de taza" },
+  { "nombre": "Pasta", "grupo": "Cereales/tubérculos", "porcionesEquivalentes": "1/2 taza" },
+  { "nombre": "Pechuga de Pollo", "grupo": "Carnes/mariscos/huevos", "porcionesEquivalentes": "30g" },
+  { "nombre": "Pescado Blanco", "grupo": "Carnes/mariscos/huevos", "porcionesEquivalentes": "40g" },
+  { "nombre": "Huevo", "grupo": "Carnes/mariscos/huevos", "porcionesEquivalentes": "1 unidad" },
+  { "nombre": "Carne Molida", "grupo": "Carnes/mariscos/huevos", "porcionesEquivalentes": "30g" },
+  { "nombre": "Zanahoria", "grupo": "Vegetales", "porcionesEquivalentes": "1/2 taza picada" },
+  { "nombre": "Cebolla", "grupo": "Vegetales", "porcionesEquivalentes": "1/2 taza picada" },
+  { "nombre": "Espinaca", "grupo": "Vegetales", "porcionesEquivalentes": "1 taza cruda" },
+  { "nombre": "Tomate", "grupo": "Vegetales", "porcionesEquivalentes": "1 unidad" },
+  { "nombre": "Manzana", "grupo": "Frutas", "porcionesEquivalentes": "1 unidad" },
+  { "nombre": "Plátano", "grupo": "Frutas", "porcionesEquivalentes": "1/2 unidad" },
+  { "nombre": "Leche Descremada", "grupo": "Lácteos", "porcionesEquivalentes": "1 taza (240ml)" },
+  { "nombre": "Yogur Natural", "grupo": "Lácteos", "porcionesEquivalentes": "3/4 de taza" },
+  { "nombre": "Lentejas", "grupo": "Leguminosas", "porcionesEquivalentes": "1/2 taza cocida" },
+  { "nombre": "Frijoles", "grupo": "Leguminosas", "porcionesEquivalentes": "1/2 taza cocida" }
+]

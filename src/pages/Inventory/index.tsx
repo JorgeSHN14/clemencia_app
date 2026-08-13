@@ -130,7 +130,8 @@ export const Inventory: React.FC = () => {
               <tr className="bg-gray-50 border-b border-gray-100 text-gray-500 text-[10px] md:text-xs uppercase tracking-wider font-bold">
                 <th className="p-2 md:p-3">Producto</th>
                 <th className="p-2 md:p-3">Stock Total</th>
-                <th className="p-2 md:p-3">Categoría</th>
+                <th className="p-2 md:p-3">Grupo / Categoría</th>
+                <th className="p-2 md:p-3">Info. Nutricional</th>
                 <th className="p-2 md:p-3 text-center">Acciones Rápidas</th>
               </tr>
             </thead>
@@ -162,9 +163,25 @@ export const Inventory: React.FC = () => {
                         </span>
                       </td>
                       <td className="p-2 md:p-3">
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[9px] md:text-[10px] font-bold uppercase tracking-wider rounded-md border border-gray-200">
-                          {item.categoria}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className="px-2 py-0.5 bg-gray-800 text-white text-[9px] font-bold uppercase tracking-wider rounded-md">
+                            {item.grupoAlimento || 'Sin Grupo'}
+                          </span>
+                          <span className="px-2 py-0.5 bg-gray-100 text-gray-600 text-[9px] font-bold uppercase tracking-wider rounded-md border border-gray-200">
+                            {item.categoria}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-2 md:p-3 min-w-[140px]">
+                        <div className="flex flex-col text-[10px] text-gray-600">
+                          <span className="font-bold text-emerald-700 mb-0.5">Por 100 {item.unidad === 'ml' || item.grupoAlimento === 'Alimentos expresados en 100 ml' ? 'ml' : 'g'}:</span>
+                          <span className="text-orange-600 font-semibold">{item.caloriasPor100g ?? 0} kcal</span>
+                          <div className="flex gap-1.5 mt-0.5 font-medium">
+                            <span className="text-blue-600" title="Proteínas">P: {item.proteinasPor100g ?? 0}g</span>
+                            <span className="text-yellow-600" title="Carbohidratos">C: {item.carbohidratosPor100g ?? 0}g</span>
+                            <span className="text-red-500" title="Grasas">G: {item.grasasPor100g ?? 0}g</span>
+                          </div>
+                        </div>
                       </td>
                       <td className="p-2 md:p-3">
                         <div className="flex justify-center items-center gap-1 md:gap-2 opacity-100 md:opacity-50 md:group-hover:opacity-100 transition-opacity">

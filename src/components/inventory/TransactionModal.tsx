@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { X, ShoppingCart, Plus, Trash2, ArrowRight, PackagePlus, PackageMinus } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import { X, ShoppingCart, Trash2, ArrowRight, PackagePlus, PackageMinus, Search, Zap } from 'lucide-react';
 import { useInventoryStore } from '@/store/useInventoryStore';
-import type { CategoriaAlimento } from '@/types';
+import { buscarEnCatalogo, catalogoAlimentos, gruposAlimentos } from '@/data/foodCatalog';
+import type { AlimentoCatalogo } from '@/data/foodCatalog';
 import toast from 'react-hot-toast';
 
 interface TransactionModalProps {
@@ -9,12 +10,22 @@ interface TransactionModalProps {
   onClose: () => void;
 }
 
-const categorias: CategoriaAlimento[] = [
-  'Cereales/tubérculos', 'Frutas', 'Vegetales', 'Lácteos', 
-  'Carnes/mariscos/huevos', 'Leguminosas', 'Grasas/semillas', 
-  'Azúcares', 'Otros'
-];
 const unidades = ['kg', 'g', 'l', 'ml', 'unidades', 'tazas', 'cucharadas'];
+
+// Color mapping for food groups
+const GRUPO_COLORS: Record<string, string> = {
+  'Cereales, tubérculos y plátanos': 'bg-amber-50 text-amber-700 border-amber-200',
+  'Frutas': 'bg-pink-50 text-pink-700 border-pink-200',
+  'Vegetales': 'bg-green-50 text-green-700 border-green-200',
+  'Leguminosas': 'bg-orange-50 text-orange-700 border-orange-200',
+  'Carnes y embutidos': 'bg-red-50 text-red-700 border-red-200',
+  'Pescados y mariscos': 'bg-cyan-50 text-cyan-700 border-cyan-200',
+  'Grasas y frutos secos': 'bg-yellow-50 text-yellow-700 border-yellow-200',
+  'Azucares': 'bg-purple-50 text-purple-700 border-purple-200',
+  'Snacks': 'bg-indigo-50 text-indigo-700 border-indigo-200',
+  'Alimentos expresados en 100 ml': 'bg-blue-50 text-blue-700 border-blue-200',
+  'Lacteos': 'bg-sky-50 text-sky-700 border-sky-200',
+};
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({ mode, onClose }) => {
   const items = useInventoryStore(state => state.items);
@@ -23,55 +34,113 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ mode, onClos
 
   const [cart, setCart] = useState<any[]>([]);
   
+  // Search & Selection State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState<AlimentoCatalogo | null>(null);
+  const [grupoFilter, setGrupoFilter] = useState<string>('Todos');
+  const searchRef = useRef<HTMLDivElement>(null);
+  
   // Current Item Form
-  const [nombre, setNombre] = useState('');
   const [cantidad, setCantidad] = useState('');
-  const [unidad, setUnidad] = useState('kg');
-  const [categoria, setCategoria] = useState<CategoriaAlimento>('Otros');
+  const [unidad, setUnidad] = useState('g');
   const [fechaVencimiento, setFechaVencimiento] = useState('');
 
-  // Autocomplete & Singular/Plural Detection
-  const isMatch = (a: string, b: string) => {
-    const str1 = a.toLowerCase().trim();
-    const str2 = b.toLowerCase().trim();
-    if (str1 === str2) return true;
-    if (str1 + 's' === str2 || str2 + 's' === str1) return true;
-    if (str1 + 'es' === str2 || str2 + 'es' === str1) return true;
-    if (str1.replace(/z$/, 'ces') === str2 || str2.replace(/z$/, 'ces') === str1) return true;
-    return false;
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Search results
+  const searchResults = useMemo(() => {
+    if (mode === 'SALIDA') {
+      // En modo SALIDA, solo mostrar items del inventario con stock
+      if (!searchQuery.trim()) return items.filter(i => i.cantidadTotal > 0);
+      const lower = searchQuery.toLowerCase();
+      return items.filter(i => i.nombre.toLowerCase().includes(lower) && i.cantidadTotal > 0);
+    }
+    // En modo ENTRADA, buscar en el catálogo completo
+    if (!searchQuery.trim() && grupoFilter === 'Todos') return [];
+    if (!searchQuery.trim() && grupoFilter !== 'Todos') {
+      return catalogoAlimentos.filter(a => a.grupo === grupoFilter).slice(0, 30);
+    }
+    let results = buscarEnCatalogo(searchQuery, 50);
+    if (grupoFilter !== 'Todos') {
+      results = results.filter(a => a.grupo === grupoFilter);
+    }
+    return results;
+  }, [searchQuery, grupoFilter, mode, items]);
+
+  // Check if selected catalog item already exists in inventory
+  const existingItem = selectedCatalogItem 
+    ? items.find(i => i.nombre.toLowerCase() === selectedCatalogItem.nombre.toLowerCase())
+    : null;
+
+  const handleSelectCatalogItem = (item: AlimentoCatalogo) => {
+    setSelectedCatalogItem(item);
+    setSearchQuery(item.nombre);
+    setUnidad(item.unidadBase);
+    setShowDropdown(false);
   };
 
-  const existingItem = items.find(i => isMatch(i.nombre, nombre));
+  const handleSelectInventoryItem = (item: any) => {
+    setSelectedCatalogItem({ 
+      nombre: item.nombre, 
+      grupo: item.grupoAlimento || '', 
+      categoria: item.categoria,
+      energiaKcal: item.caloriasPor100g,
+      proteinaG: item.proteinasPor100g,
+      grasaTotalG: item.grasasPor100g,
+      carbohidratosG: item.carbohidratosPor100g,
+      unidadBase: item.unidad
+    });
+    setSearchQuery(item.nombre);
+    setUnidad(item.unidad);
+    setShowDropdown(false);
+  };
 
   const handleAddToCart = () => {
-    if (!nombre.trim()) return toast.error('El nombre es obligatorio');
+    if (!selectedCatalogItem) return toast.error('Selecciona un alimento del catálogo');
     if (!cantidad || Number(cantidad) <= 0) return toast.error('Cantidad inválida');
 
     if (mode === 'SALIDA') {
-      if (!existingItem) return toast.error('Para registrar consumo, el producto debe existir en el inventario.');
-      if (existingItem.cantidadTotal < Number(cantidad)) {
-        return toast.error(`Stock insuficiente. Solo tienes ${existingItem.cantidadTotal} ${existingItem.unidad}`);
+      const invItem = items.find(i => i.nombre.toLowerCase() === selectedCatalogItem.nombre.toLowerCase());
+      if (!invItem) return toast.error('Producto no encontrado en inventario.');
+      if (invItem.cantidadTotal < Number(cantidad)) {
+        return toast.error(`Stock insuficiente. Solo tienes ${invItem.cantidadTotal} ${invItem.unidad}`);
       }
-      
       setCart([...cart, { 
-        id: existingItem.id, 
-        nombre: existingItem.nombre, 
+        id: invItem.id, 
+        nombre: invItem.nombre, 
         cantidad: Number(cantidad), 
-        unidad: existingItem.unidad 
+        unidad: invItem.unidad 
       }]);
     } else {
       // MODO ENTRADA
       setCart([...cart, {
-        nombre: nombre.trim(),
+        nombre: selectedCatalogItem.nombre,
         cantidad: Number(cantidad),
         unidad: existingItem ? existingItem.unidad : unidad,
-        categoria: existingItem ? existingItem.categoria : categoria,
-        fechaVencimiento: fechaVencimiento || undefined
+        categoria: selectedCatalogItem.categoria,
+        fechaVencimiento: fechaVencimiento || undefined,
+        datosNutricionales: {
+          caloriasPor100g: selectedCatalogItem.energiaKcal,
+          proteinasPor100g: selectedCatalogItem.proteinaG,
+          grasasPor100g: selectedCatalogItem.grasaTotalG,
+          carbohidratosPor100g: selectedCatalogItem.carbohidratosG,
+        }
       }]);
     }
 
     // Reset Form
-    setNombre('');
+    setSelectedCatalogItem(null);
+    setSearchQuery('');
     setCantidad('');
     setFechaVencimiento('');
   };
@@ -83,7 +152,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ mode, onClos
       if (mode === 'ENTRADA') {
         const fechaActual = new Date().toISOString().split('T')[0];
         cart.forEach(item => {
-          registrarEntrada(item.nombre, item.cantidad, item.unidad, item.categoria, fechaActual, item.fechaVencimiento);
+          registrarEntrada(
+            item.nombre, item.cantidad, item.unidad, item.categoria, 
+            fechaActual, item.fechaVencimiento, item.datosNutricionales
+          );
         });
         toast.success(`Se ingresaron ${cart.length} lotes correctamente.`);
       } else {
@@ -100,10 +172,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ mode, onClos
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in-up">
-      <div className="bg-white w-full max-w-4xl rounded-2xl shadow-xl flex flex-col max-h-[85vh] overflow-hidden">
+      <div className="bg-white w-full max-w-5xl rounded-2xl shadow-xl flex flex-col max-h-[90vh] overflow-hidden">
         
         {/* Header */}
-        <div className={`p-4 flex justify-between items-center text-white ${mode === 'ENTRADA' ? 'bg-emerald-600' : 'bg-red-500'}`}>
+        <div className={`p-4 flex justify-between items-center text-white ${mode === 'ENTRADA' ? 'bg-gradient-to-r from-emerald-600 to-emerald-500' : 'bg-gradient-to-r from-red-500 to-red-400'}`}>
           <h2 className="text-xl font-bold flex items-center gap-2">
             {mode === 'ENTRADA' ? <PackagePlus size={24} /> : <PackageMinus size={24} />}
             {mode === 'ENTRADA' ? 'Registrar Múltiples Ingresos' : 'Registrar Salidas (Consumo)'}
@@ -118,34 +190,144 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ mode, onClos
           {/* Columna Izquierda: Formulario (Agregador) */}
           <div className="lg:w-1/2 p-4 md:p-5 overflow-y-auto bg-gray-50 border-r border-gray-100">
             <h3 className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <Plus size={14} /> Buscar y Agregar
+              <Search size={14} /> Buscar en Catálogo ({catalogoAlimentos.length} alimentos)
             </h3>
             
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">Nombre del Producto</label>
-                <input 
-                  type="text" 
-                  list="inventory-items"
-                  value={nombre}
-                  onChange={e => setNombre(e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none font-medium text-sm"
-                  placeholder="Ej. Arroz Integral"
-                />
-                <datalist id="inventory-items">
-                  {items.map(i => <option key={i.id} value={i.nombre} />)}
-                </datalist>
-                
-                {existingItem && mode === 'ENTRADA' && (
-                  <p className="text-xs font-bold text-emerald-600 mt-1">✓ Producto existente. Se agregará un lote al stock.</p>
+              {/* Buscador con Dropdown */}
+              <div ref={searchRef} className="relative">
+                <label className="block text-xs font-bold text-gray-600 mb-1">
+                  {mode === 'ENTRADA' ? 'Buscar Alimento del Catálogo' : 'Buscar Producto en Inventario'}
+                </label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                  <input 
+                    type="text"
+                    value={searchQuery}
+                    onChange={e => {
+                      setSearchQuery(e.target.value);
+                      setSelectedCatalogItem(null);
+                      setShowDropdown(true);
+                    }}
+                    onFocus={() => setShowDropdown(true)}
+                    className="w-full pl-9 pr-4 border-2 border-gray-200 rounded-xl p-2.5 text-gray-800 focus:ring-2 focus:ring-emerald-500 focus:border-emerald-300 outline-none font-medium text-sm transition-all"
+                    placeholder={mode === 'ENTRADA' ? 'Ej. Arroz integral, Pollo...' : 'Buscar producto...'}
+                  />
+                  {selectedCatalogItem && (
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                      <span className="text-xs font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full">✓ Seleccionado</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Filtro por grupo (solo en modo ENTRADA) */}
+                {mode === 'ENTRADA' && showDropdown && (
+                  <div className="mt-2 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                    <button 
+                      onClick={() => setGrupoFilter('Todos')}
+                      className={`px-2.5 py-1 text-[10px] font-bold rounded-full whitespace-nowrap transition-colors ${
+                        grupoFilter === 'Todos' ? 'bg-gray-800 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
+                      }`}
+                    >
+                      Todos
+                    </button>
+                    {gruposAlimentos.map(g => (
+                      <button 
+                        key={g}
+                        onClick={() => setGrupoFilter(g)}
+                        className={`px-2.5 py-1 text-[10px] font-bold rounded-full whitespace-nowrap transition-colors ${
+                          grupoFilter === g ? 'bg-gray-800 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        {g.length > 20 ? g.slice(0, 18) + '…' : g}
+                      </button>
+                    ))}
+                  </div>
                 )}
-                {!existingItem && nombre && mode === 'ENTRADA' && (
-                  <p className="text-xs font-bold text-blue-600 mt-1">✨ Producto nuevo. Se creará un nuevo registro.</p>
-                )}
-                {existingItem && mode === 'SALIDA' && (
-                  <p className="text-xs font-bold text-blue-600 mt-1">Stock Disponible: {existingItem.cantidadTotal} {existingItem.unidad}</p>
+
+                {/* Dropdown de resultados */}
+                {showDropdown && (searchQuery.trim() || grupoFilter !== 'Todos') && (
+                  <div className="absolute z-50 mt-1 w-full bg-white border-2 border-gray-100 rounded-xl shadow-2xl max-h-64 overflow-y-auto">
+                    {(searchResults as any[]).length === 0 ? (
+                      <div className="p-4 text-center text-gray-400 text-sm">
+                        No se encontraron resultados
+                      </div>
+                    ) : (
+                      (searchResults as any[]).map((item: any, idx: number) => {
+                        const isInventoryItem = 'id' in item && 'cantidadTotal' in item;
+                        const catalogItem = isInventoryItem ? null : (item as AlimentoCatalogo);
+                        const invMatch = !isInventoryItem ? items.find(i => i.nombre.toLowerCase() === item.nombre.toLowerCase()) : null;
+                        
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => isInventoryItem ? handleSelectInventoryItem(item) : handleSelectCatalogItem(item)}
+                            className="w-full text-left px-3 py-2.5 hover:bg-emerald-50 transition-colors border-b border-gray-50 last:border-b-0 flex items-center justify-between gap-2"
+                          >
+                            <div className="flex-1 min-w-0">
+                              <p className="font-semibold text-sm text-gray-800 truncate">{item.nombre}</p>
+                              <div className="flex items-center gap-2 mt-0.5">
+                                {catalogItem && (
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${GRUPO_COLORS[catalogItem.grupo] || 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                                    {catalogItem.grupo.length > 25 ? catalogItem.grupo.slice(0, 23) + '…' : catalogItem.grupo}
+                                  </span>
+                                )}
+                                {invMatch && (
+                                  <span className="text-[9px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">
+                                    ✓ En inventario ({invMatch.cantidadTotal} {invMatch.unidad})
+                                  </span>
+                                )}
+                                {isInventoryItem && (
+                                  <span className="text-[9px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded">
+                                    Stock: {item.cantidadTotal} {item.unidad}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              {(catalogItem?.energiaKcal || item.caloriasPor100g) && (
+                                <p className="text-[10px] font-bold text-gray-500">
+                                  {catalogItem?.energiaKcal || item.caloriasPor100g} kcal
+                                </p>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
                 )}
               </div>
+
+              {/* Info nutricional del seleccionado */}
+              {selectedCatalogItem && selectedCatalogItem.energiaKcal && (
+                <div className="bg-gradient-to-r from-emerald-50 to-blue-50 border border-emerald-100 rounded-xl p-3">
+                  <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <Zap size={10} /> Info Nutricional (por 100{selectedCatalogItem.unidadBase})
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center bg-white/80 rounded-lg p-1.5">
+                      <p className="text-xs font-black text-orange-600">{selectedCatalogItem.energiaKcal?.toFixed(0)}</p>
+                      <p className="text-[8px] font-bold text-gray-400">kcal</p>
+                    </div>
+                    <div className="text-center bg-white/80 rounded-lg p-1.5">
+                      <p className="text-xs font-black text-blue-600">{selectedCatalogItem.proteinaG?.toFixed(1) ?? '-'}</p>
+                      <p className="text-[8px] font-bold text-gray-400">Prot (g)</p>
+                    </div>
+                    <div className="text-center bg-white/80 rounded-lg p-1.5">
+                      <p className="text-xs font-black text-yellow-600">{selectedCatalogItem.carbohidratosG?.toFixed(1) ?? '-'}</p>
+                      <p className="text-[8px] font-bold text-gray-400">Carb (g)</p>
+                    </div>
+                    <div className="text-center bg-white/80 rounded-lg p-1.5">
+                      <p className="text-xs font-black text-red-500">{selectedCatalogItem.grasaTotalG?.toFixed(1) ?? '-'}</p>
+                      <p className="text-[8px] font-bold text-gray-400">Grasa (g)</p>
+                    </div>
+                  </div>
+                  {existingItem && mode === 'ENTRADA' && (
+                    <p className="text-xs font-bold text-emerald-600 mt-2 flex items-center gap-1">✓ Producto existente en inventario. Se agregará un lote.</p>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-3">
                 <div className="flex-1">
@@ -174,33 +356,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ mode, onClos
               </div>
 
               {mode === 'ENTRADA' && (
-                <>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Categoría</label>
-                    <select 
-                      value={existingItem ? existingItem.categoria : categoria} 
-                      onChange={e => setCategoria(e.target.value as CategoriaAlimento)}
-                      disabled={!!existingItem}
-                      className="w-full border border-gray-200 rounded-lg p-2.5 text-gray-800 outline-none font-medium text-sm disabled:bg-gray-100 disabled:text-gray-400"
-                    >
-                      {categorias.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-600 mb-1">Vencimiento Lote (Opcional)</label>
-                    <input 
-                      type="date" 
-                      value={fechaVencimiento}
-                      onChange={e => setFechaVencimiento(e.target.value)}
-                      className="w-full border border-gray-200 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none font-medium text-sm"
-                    />
-                  </div>
-                </>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Vencimiento Lote (Opcional)</label>
+                  <input 
+                    type="date" 
+                    value={fechaVencimiento}
+                    onChange={e => setFechaVencimiento(e.target.value)}
+                    className="w-full border border-gray-200 rounded-lg p-2.5 text-gray-800 focus:ring-2 focus:ring-emerald-500 outline-none font-medium text-sm"
+                  />
+                </div>
               )}
 
               <button 
                 onClick={handleAddToCart}
-                className="w-full mt-3 bg-gray-800 hover:bg-gray-700 text-white font-bold py-2.5 rounded-lg transition-transform active:scale-95 flex justify-center items-center gap-2 shadow-sm text-sm"
+                disabled={!selectedCatalogItem}
+                className="w-full mt-3 bg-gray-800 hover:bg-gray-700 text-white font-bold py-2.5 rounded-lg transition-transform active:scale-95 flex justify-center items-center gap-2 shadow-sm text-sm disabled:opacity-40 disabled:active:scale-100"
               >
                 Añadir al Carrito <ArrowRight size={16} />
               </button>
@@ -211,7 +381,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ mode, onClos
           <div className="lg:w-1/2 p-4 md:p-5 flex flex-col bg-white">
             <h3 className="text-xs font-bold text-gray-800 uppercase tracking-wider mb-3 flex items-center gap-2">
               <ShoppingCart size={16} className={mode === 'ENTRADA' ? 'text-emerald-500' : 'text-red-500'} /> 
-              Resumen
+              Resumen ({cart.length} items)
             </h3>
             
             <div className="flex-1 overflow-y-auto space-y-2 pr-1">
@@ -230,6 +400,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({ mode, onClos
                           {mode === 'ENTRADA' ? '+' : '-'}{item.cantidad} {item.unidad}
                         </span>
                         {item.fechaVencimiento && <span className="ml-2 text-[10px] text-gray-400">Vence: {item.fechaVencimiento}</span>}
+                        {item.datosNutricionales?.caloriasPor100g && (
+                          <span className="ml-2 text-[10px] text-gray-400">{item.datosNutricionales.caloriasPor100g} kcal/100g</span>
+                        )}
                       </p>
                     </div>
                     <button 

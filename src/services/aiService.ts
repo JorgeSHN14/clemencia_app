@@ -18,10 +18,15 @@ export const generarRecetaIA = async (params: GenerarRecetaParams): Promise<Rece
   });
 
   const promptText = `DEVUELVE ÚNICAMENTE EL CÓDIGO JSON. CERO TEXTO CONVERSACIONAL ANTES O DESPUÉS. PROHIBIDO SALUDAR O EXPLICAR.
-Crea receta en JSON estricto. Usa ingredientes: ${params.inventarioDisponible.join(', ')}. Cumple restricciones: ${params.patologias.join(', ')}.
-Los pasos deben ser muy detallados. NO uses prefijos como "Paso 1:" ni números en el procedimiento. Redacta solo la acción. Busca valores nutricionales precisos.
-Formato:
-{"titulo":"","ingredientes":[{"nombre":"","cantidad":100,"unidad":""}],"procedimiento":["Detalle de la accion","Siguiente accion"],"porciones":2,"calorias":350,"proteinas":25}`;
+Crea una receta en JSON estricto. SOLO puedes usar estos ingredientes (con su información nutricional por 100g/100ml entre paréntesis): ${params.inventarioDisponible.join('; ')}.
+Restricciones clínicas a cumplir: ${params.patologias.join(', ')}.
+REGLAS ESTRICTAS:
+- SOLO usa los ingredientes proporcionados, NO inventes ni agregues otros.
+- Calcula las calorías y macronutrientes basándote en los datos nutricionales proporcionados y las cantidades que asignes a cada ingrediente.
+- Los pasos deben ser muy detallados. NO uses prefijos como "Paso 1:" ni números en el procedimiento. Redacta solo la acción.
+- Las cantidades de ingredientes deben ser realistas para una preparación.
+Formato JSON obligatorio:
+{"titulo":"","ingredientes":[{"nombre":"","cantidad":100,"unidad":"g"}],"procedimiento":["Detalle de la accion","Siguiente accion"],"porciones":2,"calorias":350,"proteinas":25}`;
 
   // Configuración adaptada a tu formato
   const generationConfig = {

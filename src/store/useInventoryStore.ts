@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { Alimento, Lote } from '@/types';
 import { supabase } from '@/lib/supabase';
+import { obtenerInfoNutricional } from '@/data/foodCatalog';
 
 interface InventoryState {
   items: Alimento[];
@@ -8,7 +9,13 @@ interface InventoryState {
   fetchInventory: () => Promise<void>;
   registrarEntrada: (
     nombre: string, cantidad: number, unidad: string, categoria: string, 
-    fechaIngreso: string, fechaVencimiento?: string
+    fechaIngreso: string, fechaVencimiento?: string,
+    datosNutricionales?: {
+      caloriasPor100g?: number | null;
+      proteinasPor100g?: number | null;
+      grasasPor100g?: number | null;
+      carbohidratosPor100g?: number | null;
+    }
   ) => Promise<void>;
   registrarConsumo: (id: string, cantidadA_Consumir: number, motivo?: string) => Promise<void>;
   registrarAjuste: (alimentoId: string, loteId: string, nuevaCantidad: number, motivo: string) => Promise<void>;
@@ -51,12 +58,16 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
         // Esto previene desfases si la base de datos fue modificada por scripts externos
         const stockReal = lotes.reduce((acc, lote) => acc + lote.cantidadRestante, 0);
 
+        // Enriquecer con datos del catálogo para obtener el grupo de alimentos
+        const catalogItem = obtenerInfoNutricional(alimento.nombre);
+
         return {
           id: alimento.id,
           nombre: alimento.nombre,
           cantidadTotal: stockReal,
           unidad: alimento.unidad as any,
           categoria: alimento.categoria as any,
+          grupoAlimento: catalogItem?.grupo,
           caloriasPor100g: alimento.calorias_por_100g,
           proteinasPor100g: alimento.proteinas_por_100g,
           grasasPor100g: alimento.grasas_por_100g,
@@ -73,7 +84,7 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
     }
   },
 
-  registrarEntrada: async (nombre, cantidad, unidad, categoria, fechaIngreso, fechaVencimiento) => {
+  registrarEntrada: async (nombre, cantidad, unidad, categoria, fechaIngreso, fechaVencimiento, datosNutricionales) => {
     try {
       const { items } = get();
       const existing = items.find(i => i.nombre.toLowerCase() === nombre.toLowerCase());
@@ -81,14 +92,22 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       let alimentoId = existing?.id;
 
       if (!existing) {
+        const insertData: any = {
+          nombre,
+          cantidad_total: cantidad,
+          unidad,
+          categoria
+        };
+        // Incluir datos nutricionales si se proporcionan
+        if (datosNutricionales) {
+          insertData.calorias_por_100g = datosNutricionales.caloriasPor100g ?? null;
+          insertData.proteinas_por_100g = datosNutricionales.proteinasPor100g ?? null;
+          insertData.grasas_por_100g = datosNutricionales.grasasPor100g ?? null;
+          insertData.carbohidratos_por_100g = datosNutricionales.carbohidratosPor100g ?? null;
+        }
         const { data: newAlimento, error: errAlimento } = await supabase
           .from('alimentos')
-          .insert({
-            nombre,
-            cantidad_total: cantidad,
-            unidad,
-            categoria
-          })
+          .insert(insertData)
           .select()
           .single();
         if (errAlimento) throw errAlimento;

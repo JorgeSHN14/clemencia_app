@@ -1,23 +1,40 @@
 import React, { useState, useMemo } from 'react';
-import { Bot, Sparkles, Plus, X, ArrowLeft, Utensils, Search, Filter, Trash2 } from 'lucide-react';
+import { Bot, Sparkles, X, ArrowLeft, Utensils, Search, Filter, Trash2, Zap, Plus, Package } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { generarRecetaIA } from '@/services/aiService';
 import { useInventoryStore } from '@/store/useInventoryStore';
 import { useRecipeStore } from '@/store/useRecipeStore';
-import type { CondicionClinica, Receta } from '@/types';
+import type { CondicionClinica, Receta, Alimento } from '@/types';
 import { RecipeCard } from '@/components/recipe/RecipeCard';
 import { RecipeSkeletonLoader } from '@/components/recipe/RecipeSkeletonLoader';
 import { RecipeDetailView } from '@/components/recipe/RecipeDetailView';
 
 const patologiasDisponibles: CondicionClinica[] = [
-  'Diabetes', 'Hipertensión', 'Dieta blanda', 
+  'Diabetes', 'Hipertensión', 'Dieta blanda',
   'Postoperatoria', 'Nutrición enteral', 'Desnutrición', 'Disfagia', 'Enfermedad Renal'
 ];
+
+// Color mapping for food groups (consistent with TransactionModal)
+const GRUPO_COLORS: Record<string, { bg: string; border: string; text: string; dot: string }> = {
+  'Cereales, tubérculos y plátanos': { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-700', dot: 'bg-amber-400' },
+  'Frutas': { bg: 'bg-pink-50', border: 'border-pink-200', text: 'text-pink-700', dot: 'bg-pink-400' },
+  'Vegetales': { bg: 'bg-green-50', border: 'border-green-200', text: 'text-green-700', dot: 'bg-green-400' },
+  'Leguminosas': { bg: 'bg-orange-50', border: 'border-orange-200', text: 'text-orange-700', dot: 'bg-orange-400' },
+  'Carnes y embutidos': { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-700', dot: 'bg-red-400' },
+  'Pescados y mariscos': { bg: 'bg-cyan-50', border: 'border-cyan-200', text: 'text-cyan-700', dot: 'bg-cyan-400' },
+  'Grasas y frutos secos': { bg: 'bg-yellow-50', border: 'border-yellow-200', text: 'text-yellow-700', dot: 'bg-yellow-400' },
+  'Azucares': { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-700', dot: 'bg-purple-400' },
+  'Snacks': { bg: 'bg-indigo-50', border: 'border-indigo-200', text: 'text-indigo-700', dot: 'bg-indigo-400' },
+  'Alimentos expresados en 100 ml': { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-700', dot: 'bg-blue-400' },
+  'Lacteos': { bg: 'bg-sky-50', border: 'border-sky-200', text: 'text-sky-700', dot: 'bg-sky-400' },
+};
+
+const DEFAULT_COLORS = { bg: 'bg-gray-50', border: 'border-gray-200', text: 'text-gray-700', dot: 'bg-gray-400' };
 
 export const RecipeGenerator: React.FC = () => {
   const inventoryItems = useInventoryStore(state => state.items);
   const { recipes, addGeneratedRecipe, removeRecipe } = useRecipeStore();
-  
+
   // Navigation States
   const [activeView, setActiveView] = useState<'recetario' | 'generador'>('recetario');
   const [loading, setLoading] = useState(false);
@@ -25,37 +42,72 @@ export const RecipeGenerator: React.FC = () => {
   const [viewingRecipe, setViewingRecipe] = useState<Receta | null>(null); // Receta vista desde el grid
 
   // Generator States
-  const [ingredientesCarrito, setIngredientesCarrito] = useState<string[]>([]);
+  const [ingredientesCarrito, setIngredientesCarrito] = useState<Alimento[]>([]);
   const [patologiasSeleccionadas, setPatologiasSeleccionadas] = useState<CondicionClinica[]>([]);
-  const [customIngrediente, setCustomIngrediente] = useState('');
+  const [ingredientSearch, setIngredientSearch] = useState('');
+  const [grupoFilter, setGrupoFilter] = useState<string>('Todos');
 
   // Filter & Search States
   const [searchTerm, setSearchTerm] = useState('');
   const [filtroOrigen, setFiltroOrigen] = useState<'todas' | 'base' | 'ia'>('todas');
   const [filtroApto, setFiltroApto] = useState<CondicionClinica | 'Todas'>('Todas');
 
+  // Unique groups from inventory items
+  const availableGroups = useMemo(() => {
+    const groups = new Set<string>();
+    inventoryItems.forEach(item => {
+      if (item.grupoAlimento) groups.add(item.grupoAlimento);
+    });
+    return Array.from(groups);
+  }, [inventoryItems]);
+
+  // Filtered inventory items for selection
+  const filteredInventoryItems = useMemo(() => {
+    let filtered = inventoryItems.filter(i => i.cantidadTotal > 0);
+
+    if (ingredientSearch.trim()) {
+      const lower = ingredientSearch.toLowerCase();
+      filtered = filtered.filter(i => i.nombre.toLowerCase().includes(lower));
+    }
+
+    if (grupoFilter !== 'Todos') {
+      filtered = filtered.filter(i => i.grupoAlimento === grupoFilter);
+    }
+
+    return filtered;
+  }, [inventoryItems, ingredientSearch, grupoFilter]);
+
   // Funciones Generador
   const togglePatologia = (p: CondicionClinica) => {
     setPatologiasSeleccionadas(prev => prev.includes(p) ? prev.filter(item => item !== p) : [...prev, p]);
   };
-  const addIngredienteToCart = (nombre: string) => {
-    if (!ingredientesCarrito.includes(nombre)) setIngredientesCarrito(prev => [...prev, nombre]);
-  };
-  const addCustomIngrediente = () => {
-    if (customIngrediente.trim() && !ingredientesCarrito.includes(`Usar ${customIngrediente}`)) {
-      setIngredientesCarrito(prev => [...prev, `Usar ${customIngrediente}`]);
-      setCustomIngrediente('');
+
+  const addIngredienteToCart = (item: Alimento) => {
+    if (!ingredientesCarrito.find(i => i.id === item.id)) {
+      setIngredientesCarrito(prev => [...prev, item]);
+    } else {
+      toast('Ya está en tu carrito', { icon: '📋' });
     }
   };
-  const removeIngrediente = (nombre: string) => setIngredientesCarrito(prev => prev.filter(i => i !== nombre));
+
+  const removeIngrediente = (id: string) => setIngredientesCarrito(prev => prev.filter(i => i.id !== id));
 
   const handleGenerate = async () => {
     if (ingredientesCarrito.length === 0) return toast.error('Agrega al menos un ingrediente al carrito.');
     setLoading(true);
     setRecipe(null);
     try {
+      // Build enriched ingredient list with nutritional info
+      const ingredientesConInfo = ingredientesCarrito.map(item => {
+        let info = item.nombre;
+        if (item.caloriasPor100g !== undefined) {
+          info += ` (${item.caloriasPor100g}kcal, ${item.proteinasPor100g ?? 0}g Prot, ${item.carbohidratosPor100g ?? 0}g Carb, ${item.grasasPor100g ?? 0}g Grasa por 100${item.unidad === 'ml' ? 'ml' : 'g'})`;
+        }
+        return info;
+      });
+
       const result = await generarRecetaIA({
-        inventarioDisponible: ingredientesCarrito,
+        inventarioDisponible: ingredientesConInfo,
         patologias: patologiasSeleccionadas.length > 0 ? patologiasSeleccionadas : ['Ninguna'],
       });
       setRecipe(result);
@@ -89,8 +141,8 @@ export const RecipeGenerator: React.FC = () => {
     // Filtro Búsqueda
     if (searchTerm.trim()) {
       const lower = searchTerm.toLowerCase();
-      combined = combined.filter(r => 
-        r.titulo.toLowerCase().includes(lower) || 
+      combined = combined.filter(r =>
+        r.titulo.toLowerCase().includes(lower) ||
         r.ingredientes.some(i => i.nombre.toLowerCase().includes(lower))
       );
     }
@@ -120,9 +172,9 @@ export const RecipeGenerator: React.FC = () => {
             Gestiona la base de datos de recetas o crea nuevas con Inteligencia Artificial.
           </p>
         </div>
-        
+
         {activeView === 'recetario' ? (
-          <button 
+          <button
             onClick={() => setActiveView('generador')}
             className="bg-emerald-600 hover:bg-emerald-700 text-white p-3 md:px-6 md:py-3 rounded-xl shadow-sm shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 flex-shrink-0 font-bold"
           >
@@ -130,7 +182,7 @@ export const RecipeGenerator: React.FC = () => {
             Generar Nueva Receta
           </button>
         ) : (
-          <button 
+          <button
             onClick={() => setActiveView('recetario')}
             className="bg-white border-2 border-gray-200 text-gray-600 hover:bg-gray-50 p-3 md:px-6 md:py-3 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 flex-shrink-0 font-bold"
           >
@@ -147,19 +199,19 @@ export const RecipeGenerator: React.FC = () => {
           <div className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-4 items-center">
             <div className="relative flex-1 w-full">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder="Buscar por título o ingrediente (ej. Pollo)..."
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all text-sm"
               />
             </div>
-            
+
             <div className="flex gap-2 w-full md:w-auto">
               <div className="relative flex-1 md:flex-none">
                 <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
-                <select 
+                <select
                   value={filtroOrigen}
                   onChange={e => setFiltroOrigen(e.target.value as any)}
                   className="w-full md:w-40 pl-9 pr-8 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium text-gray-700 appearance-none"
@@ -170,7 +222,7 @@ export const RecipeGenerator: React.FC = () => {
                 </select>
               </div>
 
-              <select 
+              <select
                 value={filtroApto}
                 onChange={e => setFiltroApto(e.target.value as any)}
                 className="flex-1 md:w-44 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm font-medium text-gray-700"
@@ -198,7 +250,7 @@ export const RecipeGenerator: React.FC = () => {
                       <RecipeCard recipe={r} isGenerated={isGenerated} />
                     </div>
                     {isGenerated && (
-                      <button 
+                      <button
                         onClick={(e) => handleDeleteRecipe(e, r.id)}
                         className="absolute top-3 right-3 bg-white/90 backdrop-blur-sm border border-red-100 text-red-500 p-2 rounded-xl opacity-0 group-hover:opacity-100 transition-all hover:bg-red-50 hover:text-red-600 hover:scale-105 shadow-sm"
                         title="Eliminar receta"
@@ -230,11 +282,10 @@ export const RecipeGenerator: React.FC = () => {
                     <button
                       key={p}
                       onClick={() => togglePatologia(p)}
-                      className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${
-                        isActive 
-                          ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20' 
+                      className={`px-4 py-2 text-xs font-bold rounded-xl transition-all ${isActive
+                          ? 'bg-blue-500 text-white shadow-sm shadow-blue-500/20'
                           : 'bg-gray-50 text-gray-600 border border-gray-200 hover:bg-gray-100'
-                      }`}
+                        }`}
                     >
                       {isActive && <CheckIcon />} {p}
                     </button>
@@ -244,68 +295,147 @@ export const RecipeGenerator: React.FC = () => {
             </div>
 
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
-              <label className="block text-sm font-black text-emerald-800 mb-4 uppercase tracking-wider">
-                2. Añadir Ingredientes al Carrito
+              <label className="block text-sm font-black text-emerald-800 mb-4 uppercase tracking-wider flex items-center gap-2">
+                <Package size={16} />
+                2. Seleccionar Ingredientes del Inventario
               </label>
-              
-              <div className="flex gap-2 mb-4">
-                <select 
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      const item = inventoryItems.find(i => i.nombre === e.target.value);
-                      let infoNutricional = '';
-                      if (item && item.caloriasPor100g !== undefined) {
-                        infoNutricional = ` (${item.caloriasPor100g}kcal, ${item.proteinasPor100g}g Prot, ${item.carbohidratosPor100g}g Carb por 100g)`;
-                      }
-                      addIngredienteToCart(`${e.target.value}${infoNutricional}`);
-                    }
-                    e.target.value = "";
-                  }}
-                  className="flex-1 border-2 border-gray-100 rounded-xl p-3 text-sm text-gray-800 bg-gray-50 outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
-                >
-                  <option value="">Seleccionar del Inventario...</option>
-                  {inventoryItems.map(item => (
-                    <option key={item.id} value={item.nombre}>{item.nombre} ({item.cantidadTotal} {item.unidad})</option>
-                  ))}
-                </select>
+
+              {/* Search bar for ingredients */}
+              <div className="relative mb-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  value={ingredientSearch}
+                  onChange={e => setIngredientSearch(e.target.value)}
+                  className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-300 font-medium text-sm transition-all"
+                  placeholder="Buscar ingrediente en el inventario..."
+                />
               </div>
 
-              <div className="flex gap-2 mb-6">
-                <input 
-                  type="text"
-                  value={customIngrediente}
-                  onChange={e => setCustomIngrediente(e.target.value)}
-                  placeholder="Escribir un ingrediente externo..."
-                  className="flex-1 border-2 border-gray-100 rounded-xl p-3 text-sm text-gray-800 bg-gray-50 outline-none focus:ring-2 focus:ring-emerald-500 font-medium"
-                  onKeyDown={e => e.key === 'Enter' && addCustomIngrediente()}
-                />
-                <button 
-                  onClick={addCustomIngrediente}
-                  className="bg-gray-800 text-white p-3 rounded-xl hover:bg-gray-700 transition-all shadow-sm active:scale-95 flex items-center justify-center"
+              {/* Group filter pills */}
+              <div className="flex gap-1.5 overflow-x-auto pb-2 mb-3 scrollbar-hide">
+                <button
+                  onClick={() => setGrupoFilter('Todos')}
+                  className={`px-3 py-1 text-[10px] font-bold rounded-full whitespace-nowrap transition-colors ${grupoFilter === 'Todos' ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+                    }`}
                 >
-                  <Plus size={20} />
+                  Todos ({inventoryItems.length})
                 </button>
+                {availableGroups.map(g => {
+                  const count = inventoryItems.filter(i => i.grupoAlimento === g).length;
+                  const colors = GRUPO_COLORS[g] || DEFAULT_COLORS;
+                  return (
+                    <button
+                      key={g}
+                      onClick={() => setGrupoFilter(g)}
+                      className={`px-3 py-1 text-[10px] font-bold rounded-full whitespace-nowrap transition-colors flex items-center gap-1 ${grupoFilter === g
+                          ? 'bg-gray-800 text-white'
+                          : `${colors.bg} ${colors.text} border ${colors.border} hover:opacity-80`
+                        }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${grupoFilter === g ? 'bg-white' : colors.dot}`}></span>
+                      {g.length > 18 ? g.slice(0, 16) + '…' : g} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Ingredient grid */}
+              <div className="max-h-[280px] overflow-y-auto pr-1 space-y-1.5">
+                {filteredInventoryItems.length === 0 ? (
+                  <div className="text-center py-8 text-gray-400">
+                    <Package size={24} className="mx-auto mb-2 opacity-50" />
+                    <p className="text-sm font-medium">No hay ingredientes que coincidan en stock</p>
+                  </div>
+                ) : (
+                  filteredInventoryItems.map(item => {
+                    const isInCart = ingredientesCarrito.some(i => i.id === item.id);
+                    const colors = GRUPO_COLORS[item.grupoAlimento || ''] || DEFAULT_COLORS;
+
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => addIngredienteToCart(item)}
+                        disabled={isInCart}
+                        className={`w-full text-left p-3 rounded-xl border-2 transition-all flex items-center justify-between gap-3 group/item ${isInCart
+                            ? 'border-emerald-200 bg-emerald-50/50 opacity-60 cursor-default'
+                            : `border-gray-100 hover:${colors.border} hover:${colors.bg} hover:shadow-sm active:scale-[0.98]`
+                          }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/* Color dot indicator */}
+                          <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${isInCart ? 'bg-emerald-400' : colors.dot}`}></span>
+
+                          <div className="min-w-0 flex-1">
+                            <p className="font-semibold text-sm text-gray-800 truncate">{item.nombre}</p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[10px] font-medium text-gray-400">
+                                {item.cantidadTotal > 0
+                                  ? `${item.cantidadTotal} ${item.unidad}`
+                                  : 'Sin stock'
+                                }
+                              </span>
+                              {item.caloriasPor100g !== undefined && (
+                                <span className="text-[10px] font-bold text-orange-500">
+                                  {item.caloriasPor100g} kcal
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex-shrink-0">
+                          {isInCart ? (
+                            <span className="text-[10px] font-bold text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full">✓ Añadido</span>
+                          ) : (
+                            <span className="w-7 h-7 rounded-lg bg-gray-100 group-hover/item:bg-emerald-500 group-hover/item:text-white text-gray-400 flex items-center justify-center transition-all">
+                              <Plus size={14} />
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })
+                )}
               </div>
 
               {/* Carrito Visual */}
-              <div className="min-h-[120px] border-2 border-dashed border-gray-200 rounded-2xl p-4 bg-gray-50">
-                {ingredientesCarrito.length === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-2 mt-4">
-                    <Utensils size={24} className="opacity-50" />
-                    <p className="text-sm font-medium">Tu carrito de ingredientes está vacío</p>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {ingredientesCarrito.map((ing, idx) => (
-                      <span key={idx} className="bg-white border border-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm flex items-center gap-2">
-                        {ing}
-                        <button onClick={() => removeIngrediente(ing)} className="text-red-400 hover:text-red-600 bg-red-50 p-1 rounded-md">
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                )}
+              <div className="mt-4 pt-4 border-t border-gray-100">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Utensils size={12} /> Tu Carrito ({ingredientesCarrito.length} ingredientes)
+                </p>
+                <div className="min-h-[60px]">
+                  {ingredientesCarrito.length === 0 ? (
+                    <div className="flex items-center justify-center text-gray-300 gap-2 py-4">
+                      <Utensils size={16} className="opacity-50" />
+                      <p className="text-xs font-medium">Selecciona ingredientes de arriba</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-1.5">
+                      {ingredientesCarrito.map((item) => {
+                        const colors = GRUPO_COLORS[item.grupoAlimento || ''] || DEFAULT_COLORS;
+                        return (
+                          <span
+                            key={item.id}
+                            className={`${colors.bg} border ${colors.border} ${colors.text} px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`}></span>
+                            {item.nombre}
+                            {item.caloriasPor100g !== undefined && (
+                              <span className="opacity-50 text-[9px]">{item.caloriasPor100g}kcal</span>
+                            )}
+                            <button
+                              onClick={(e) => { e.stopPropagation(); removeIngrediente(item.id); }}
+                              className="text-current opacity-40 hover:opacity-100 bg-black/5 p-0.5 rounded transition-opacity"
+                            >
+                              <X size={10} />
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
@@ -318,10 +448,45 @@ export const RecipeGenerator: React.FC = () => {
               </div>
               <h3 className="text-2xl font-black text-emerald-800 mb-3 tracking-tight">Motor de Inteligencia Artificial</h3>
               <p className="text-sm text-emerald-600 mb-8 max-w-sm leading-relaxed font-medium">
-                Llena tu carrito con ingredientes y la IA diseñará una receta clínica perfecta, calculando los macros y respetando las patologías seleccionadas.
+                Selecciona ingredientes de tu inventario y la IA diseñará una receta clínica perfecta, calculando los macros y respetando las patologías.
               </p>
-              
-              <button 
+
+              {/* Summary of selected ingredients */}
+              {ingredientesCarrito.length > 0 && (
+                <div className="w-full bg-white/80 backdrop-blur-sm border border-emerald-100 rounded-2xl p-4 mb-6 text-left">
+                  <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-2 flex items-center gap-1">
+                    <Zap size={10} /> Resumen Nutricional Estimado
+                  </p>
+                  <div className="grid grid-cols-4 gap-2">
+                    <div className="text-center bg-emerald-50 rounded-lg p-2">
+                      <p className="text-sm font-black text-orange-600">
+                        {ingredientesCarrito.reduce((acc, i) => acc + (i.caloriasPor100g || 0), 0).toFixed(0)}
+                      </p>
+                      <p className="text-[8px] font-bold text-gray-400">kcal total</p>
+                    </div>
+                    <div className="text-center bg-emerald-50 rounded-lg p-2">
+                      <p className="text-sm font-black text-blue-600">
+                        {ingredientesCarrito.reduce((acc, i) => acc + (i.proteinasPor100g || 0), 0).toFixed(1)}
+                      </p>
+                      <p className="text-[8px] font-bold text-gray-400">Prot (g)</p>
+                    </div>
+                    <div className="text-center bg-emerald-50 rounded-lg p-2">
+                      <p className="text-sm font-black text-yellow-600">
+                        {ingredientesCarrito.reduce((acc, i) => acc + (i.carbohidratosPor100g || 0), 0).toFixed(1)}
+                      </p>
+                      <p className="text-[8px] font-bold text-gray-400">Carb (g)</p>
+                    </div>
+                    <div className="text-center bg-emerald-50 rounded-lg p-2">
+                      <p className="text-sm font-black text-red-500">
+                        {ingredientesCarrito.reduce((acc, i) => acc + (i.grasasPor100g || 0), 0).toFixed(1)}
+                      </p>
+                      <p className="text-[8px] font-bold text-gray-400">Grasa (g)</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <button
                 onClick={handleGenerate}
                 disabled={loading || ingredientesCarrito.length === 0}
                 className="w-full bg-emerald-500 hover:bg-emerald-400 text-gray-900 font-black py-4 rounded-2xl transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 flex justify-center items-center gap-3 shadow-emerald-500/30 shadow-xl text-lg group"
@@ -344,8 +509,8 @@ export const RecipeGenerator: React.FC = () => {
 
       {/* VISTAS A PANTALLA COMPLETA */}
       {recipe && (
-        <RecipeDetailView 
-          recipe={recipe} 
+        <RecipeDetailView
+          recipe={recipe}
           context="Recién Generado con IA ✨"
           onClose={() => setRecipe(null)}
           onSave={handleSaveRecipe}
@@ -355,8 +520,8 @@ export const RecipeGenerator: React.FC = () => {
       )}
 
       {viewingRecipe && (
-        <RecipeDetailView 
-          recipe={viewingRecipe} 
+        <RecipeDetailView
+          recipe={viewingRecipe}
           context={(viewingRecipe as any).es_generada ? "Receta Guardada (IA)" : "Receta de la Fundación"}
           onClose={() => setViewingRecipe(null)}
         />

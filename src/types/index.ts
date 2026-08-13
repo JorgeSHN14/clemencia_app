@@ -43,9 +43,10 @@ export interface Alimento {
   cantidadTotal: number;
   unidad: 'kg' | 'g' | 'l' | 'ml' | 'unidades' | 'tazas' | 'cucharadas';
   categoria: CategoriaAlimento;
+  grupoAlimento?: string; // Grupo de intercambio del catálogo
   lotes: Lote[];
   movimientos: MovimientoInventario[];
-  // Información Nutricional (opcional, por cada 100g o 100ml)
+  // Información Nutricional (por cada 100g o 100ml)
   caloriasPor100g?: number;
   proteinasPor100g?: number;
   grasasPor100g?: number;

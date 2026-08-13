@@ -1,89 +1,60 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, ShieldCheck, ChevronDown, ChevronUp, Plus, Trash2, Activity, ArrowRight } from 'lucide-react';
+import { BookOpen, ShieldCheck, Plus, Trash2, Activity, ArrowRight, Search, ArrowUpDown } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { useGuideStore } from '@/store/useGuideStore';
 import type { Guide as GuideType } from '@/store/useGuideStore';
 import { GuideFormModal } from './GuideFormModal';
 
-interface AccordionItemProps {
-  guide: GuideType;
-  isOpen: boolean;
-  onToggle: () => void;
-  onImageClick: (url: string) => void;
-}
-
-const AccordionItem: React.FC<AccordionItemProps> = ({ guide, isOpen, onToggle, onImageClick }) => {
-  return (
-    <div className="border border-gray-100 rounded-2xl overflow-hidden bg-white shadow-sm transition-all hover:shadow-md mb-3 relative group">
-      <button
-        onClick={onToggle}
-        className="w-full px-5 py-4 flex justify-between items-center bg-white text-left focus:outline-none"
-      >
-        <span className="font-semibold text-gray-800 text-lg pr-8">{guide.titulo}</span>
-        <span className={`p-1 rounded-full transition-colors ${isOpen ? 'bg-emerald-100 text-emerald-600' : 'bg-gray-50 text-gray-400'}`}>
-          {isOpen ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
-        </span>
-      </button>
-
-      {isOpen && (
-        <div className="px-5 pb-5 pt-2 animate-fade-in-up">
-          <div className="h-px w-full bg-gray-100 mb-4"></div>
-          
-          {guide.imagenes_urls && guide.imagenes_urls.length > 0 && (
-            <div className="mb-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {guide.imagenes_urls.map((img, idx) => (
-                <div 
-                  key={idx} 
-                  className="rounded-xl overflow-hidden bg-gray-50 flex justify-center border border-gray-100 cursor-pointer"
-                  onClick={() => onImageClick(img)}
-                >
-                  <img src={img} alt={`${guide.titulo} - img ${idx + 1}`} className="max-h-80 object-contain hover:scale-105 transition-transform" />
-                </div>
-              ))}
-            </div>
-          )}
-          
-          <p className="text-gray-600 leading-relaxed whitespace-pre-wrap text-sm md:text-base">
-            {guide.contenido}
-          </p>
-
-          {guide.enlace_url && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <a 
-                href={guide.enlace_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm font-semibold text-emerald-600 hover:text-emerald-700 bg-emerald-50 px-4 py-2 rounded-lg transition-colors"
-              >
-                Abrir Enlace de Referencia
-                <ArrowRight size={16} />
-              </a>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
-
-interface BpmPostCardProps {
+interface GuideCardProps {
   guide: GuideType;
   onImageClick: (url: string) => void;
+  onDelete: (id: string, urls?: string[]) => Promise<void>;
 }
 
-const BpmPostCard: React.FC<BpmPostCardProps> = ({ guide, onImageClick }) => {
+const GuideCard: React.FC<GuideCardProps> = ({ guide, onImageClick, onDelete }) => {
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDelete = async () => {
+    if (window.confirm('¿Estás seguro de que deseas eliminar este registro?')) {
+      try {
+        setIsDeleting(true);
+        await onDelete(guide.id, guide.imagenes_urls);
+        toast.success('Eliminado correctamente');
+      } catch (error) {
+        console.error(error);
+        toast.error('Error al eliminar');
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
+  const isClinica = guide.tipo === 'clinica';
+
   return (
     <div className="border border-gray-100 rounded-3xl overflow-hidden bg-white shadow-sm hover:shadow-lg transition-all relative group flex flex-col h-full w-full">
       {/* Header del post */}
       <div className="px-5 py-4 border-b border-gray-50 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center">
-            <ShieldCheck size={20} />
+            {isClinica ? <Activity size={20} /> : <ShieldCheck size={20} />}
           </div>
           <div>
-            <h3 className="font-bold text-gray-800 text-lg">{guide.titulo}</h3>
-            <p className="text-xs text-gray-400">Norma BPM</p>
+            <h3 className="font-bold text-gray-800 text-lg leading-tight">{guide.titulo}</h3>
+            <p className="text-xs text-gray-400">
+              {isClinica ? 'Dietoterapia Clínica' : 'Norma BPM'}
+            </p>
           </div>
         </div>
+
+        <button
+          onClick={handleDelete}
+          disabled={isDeleting}
+          className="text-gray-400 hover:text-red-500 p-1.5 rounded-xl hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+          title="Eliminar"
+        >
+          <Trash2 size={18} />
+        </button>
       </div>
 
       {/* Galería de imágenes en carrusel vertical o simple stack */}
@@ -136,11 +107,12 @@ const BpmPostCard: React.FC<BpmPostCardProps> = ({ guide, onImageClick }) => {
 
 export const Guide: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'clinica' | 'bpm'>('clinica');
-  const [openIndex, setOpenIndex] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortBy, setSortBy] = useState<'recientes' | 'alfabetico-az' | 'alfabetico-za'>('recientes');
 
-  const { guides, fetchGuides, isLoading } = useGuideStore();
+  const { guides, fetchGuides, deleteGuide, isLoading } = useGuideStore();
 
   useEffect(() => {
     fetchGuides();
@@ -148,14 +120,24 @@ export const Guide: React.FC = () => {
 
   const handleTabChange = (tab: 'clinica' | 'bpm') => {
     setActiveTab(tab);
-    setOpenIndex(null); // Cerrar acordeones al cambiar de pestaña
+    setSearchTerm('');
   };
 
-  const toggleAccordion = (id: string) => {
-    setOpenIndex(prevId => (prevId === id ? null : id));
-  };
-
-  const filteredGuides = guides.filter(g => g.tipo === activeTab);
+  const filteredAndSortedGuides = guides
+    .filter(g => g.tipo === activeTab)
+    .filter(g => 
+      g.titulo.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      g.contenido.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      if (sortBy === 'alfabetico-az') {
+        return a.titulo.localeCompare(b.titulo);
+      }
+      if (sortBy === 'alfabetico-za') {
+        return b.titulo.localeCompare(a.titulo);
+      }
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
 
   return (
     <div className="space-y-6 pb-6 animate-fade-in-up">
@@ -205,37 +187,76 @@ export const Guide: React.FC = () => {
         </button>
       </div>
 
+      {/* Barra de Filtros y Búsqueda */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-center bg-gray-50/50 p-4 rounded-3xl border border-gray-100/80">
+        <div className="relative w-full sm:w-80">
+          <Search className="absolute left-3.5 top-3.5 text-gray-400" size={18} />
+          <input
+            type="text"
+            placeholder={`Buscar en ${activeTab === 'clinica' ? 'dietoterapias' : 'normas'}...`}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-16 py-3 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-sm text-gray-700 transition-all placeholder:text-gray-400 shadow-sm"
+          />
+          {searchTerm && (
+            <button 
+              onClick={() => setSearchTerm('')} 
+              className="absolute right-3.5 top-3.5 text-xs text-emerald-600 hover:text-emerald-700 font-semibold bg-emerald-50 hover:bg-emerald-100/80 px-2 py-1 rounded-lg transition-colors"
+            >
+              Limpiar
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider hidden sm:inline">Ordenar por:</label>
+          <div className="relative w-full sm:w-48">
+            <ArrowUpDown className="absolute left-3.5 top-3.5 text-gray-400 pointer-events-none" size={16} />
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              className="w-full pl-10 pr-8 py-3 border border-gray-200 rounded-2xl outline-none focus:ring-2 focus:ring-emerald-500 bg-white text-sm text-gray-700 transition-all shadow-sm appearance-none cursor-pointer"
+            >
+              <option value="recientes">Más recientes</option>
+              <option value="alfabetico-az">Título (A - Z)</option>
+              <option value="alfabetico-za">Título (Z - A)</option>
+            </select>
+            <div className="absolute right-3.5 top-4.5 pointer-events-none text-gray-400">
+              <svg className="w-4 h-4 fill-current" viewBox="0 0 20 20">
+                <path d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Listado de Contenido según la pestaña seleccionada */}
       <section className="pt-2">
         {isLoading ? (
           <div className="flex justify-center p-12">
             <div className="animate-spin rounded-full h-12 w-12 border-4 border-emerald-500 border-t-transparent"></div>
           </div>
-        ) : filteredGuides.length === 0 ? (
+        ) : filteredAndSortedGuides.length === 0 ? (
           <div className="bg-white p-12 rounded-3xl border border-gray-100 text-center shadow-sm">
             <BookOpen size={48} className="mx-auto text-gray-300 mb-4" />
-            <h3 className="text-lg font-bold text-gray-700">Aún no hay registros</h3>
-            <p className="text-gray-500 mt-2">Haz clic en "Añadir Norma" para crear tu primer {activeTab === 'clinica' ? 'protocolo clínico' : 'post de BPM'}.</p>
-          </div>
-        ) : activeTab === 'clinica' ? (
-          <div className="space-y-2 max-w-4xl">
-            {filteredGuides.map((guide) => (
-              <AccordionItem 
-                key={guide.id} 
-                guide={guide}
-                isOpen={openIndex === guide.id}
-                onToggle={() => toggleAccordion(guide.id)}
-                onImageClick={setFullscreenImage}
-              />
-            ))}
+            <h3 className="text-lg font-bold text-gray-700">
+              {searchTerm ? 'Sin resultados' : 'Aún no hay registros'}
+            </h3>
+            <p className="text-gray-500 mt-2">
+              {searchTerm 
+                ? `No encontramos registros que coincidan con "${searchTerm}".`
+                : `Haz clic en "Añadir Norma" para crear tu primer ${activeTab === 'clinica' ? 'protocolo clínico' : 'post de BPM'}.`
+              }
+            </p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6 max-w-6xl mx-auto w-full">
-            {filteredGuides.map((guide) => (
-              <BpmPostCard 
+            {filteredAndSortedGuides.map((guide) => (
+              <GuideCard 
                 key={guide.id} 
                 guide={guide}
                 onImageClick={setFullscreenImage}
+                onDelete={deleteGuide}
               />
             ))}
           </div>
@@ -260,7 +281,6 @@ export const Guide: React.FC = () => {
             className="absolute top-4 right-4 text-white hover:text-gray-300 p-2 bg-black/50 rounded-full"
             onClick={() => setFullscreenImage(null)}
           >
-            <Trash2 className="hidden" /> {/* Para mantener import vivo y no fallar ts */}
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
           </button>
           <img 

@@ -1,3 +1,3 @@
 allowBuilds:
-  '@google/genai': false
-  protobufjs: false
+  '@google/genai': true
+  protobufjs: true

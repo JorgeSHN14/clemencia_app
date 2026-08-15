@@ -19,6 +19,22 @@ export type CategoriaAlimento =
 
 export type CondicionClinica = string;
 
+export type CategoriaCondicion = 'comorbilidad' | 'discapacidad' | 'dificultad';
+
+export interface CondicionClinicaDetalle {
+  id: string;
+  nombre: string;
+  categoria: CategoriaCondicion;
+}
+
+export interface ParametroClinico {
+  id: string;
+  nombre: string;
+  valor_hombre: number;
+  valor_mujer: number;
+  descripcion?: string;
+}
+
 export interface Lote {
   id: string;
   fechaIngreso: string; // ISO 8601
@@ -87,10 +103,16 @@ export interface Paciente {
   peso: number; // kg
   talla: number; // metros
   imc: number;
-  // Nuevas mediciones antropométricas opcionales
+  // Mediciones antropométricas opcionales
   porcentajeGrasa?: number;
   circunferenciaCintura?: number; // cm
   circunferenciaCadera?: number; // cm
-  diagnostico: CondicionClinica[];
+  circunferenciaBraquial?: number; // cm — CB
+  circunferenciaPantorrilla?: number; // cm — CP
+  // Diagnósticos y condiciones
+  diagnostico: CondicionClinica[]; // comorbilidades
+  discapacidadFisica: string[]; // múltiple selección
+  dificultadMasticacion: boolean;
+  observaciones?: string;
   medicamentos: string[];
 }

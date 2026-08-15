@@ -32,8 +32,13 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         porcentajeGrasa: p.porcentaje_grasa ? Number(p.porcentaje_grasa) : undefined,
         circunferenciaCintura: p.circunferencia_cintura ? Number(p.circunferencia_cintura) : undefined,
         circunferenciaCadera: p.circunferencia_cadera ? Number(p.circunferencia_cadera) : undefined,
-        diagnostico: p.diagnostico,
-        medicamentos: p.medicamentos
+        circunferenciaBraquial: p.circunferencia_braquial ? Number(p.circunferencia_braquial) : undefined,
+        circunferenciaPantorrilla: p.circunferencia_pantorrilla ? Number(p.circunferencia_pantorrilla) : undefined,
+        diagnostico: p.diagnostico || [],
+        discapacidadFisica: p.discapacidad_fisica || [],
+        dificultadMasticacion: p.dificultad_masticacion || false,
+        observaciones: p.observaciones || undefined,
+        medicamentos: p.medicamentos || [],
       }));
 
       set({ patients, isLoading: false });
@@ -55,8 +60,13 @@ export const usePatientStore = create<PatientState>((set, get) => ({
         porcentaje_grasa: patient.porcentajeGrasa,
         circunferencia_cintura: patient.circunferenciaCintura,
         circunferencia_cadera: patient.circunferenciaCadera,
+        circunferencia_braquial: patient.circunferenciaBraquial,
+        circunferencia_pantorrilla: patient.circunferenciaPantorrilla,
         diagnostico: patient.diagnostico,
-        medicamentos: patient.medicamentos
+        discapacidad_fisica: patient.discapacidadFisica,
+        dificultad_masticacion: patient.dificultadMasticacion,
+        observaciones: patient.observaciones,
+        medicamentos: patient.medicamentos,
       });
       if (error) throw error;
       await get().fetchPatients();
@@ -78,7 +88,12 @@ export const usePatientStore = create<PatientState>((set, get) => ({
       if (updatedPatient.porcentajeGrasa !== undefined) payload.porcentaje_grasa = updatedPatient.porcentajeGrasa;
       if (updatedPatient.circunferenciaCintura !== undefined) payload.circunferencia_cintura = updatedPatient.circunferenciaCintura;
       if (updatedPatient.circunferenciaCadera !== undefined) payload.circunferencia_cadera = updatedPatient.circunferenciaCadera;
+      if (updatedPatient.circunferenciaBraquial !== undefined) payload.circunferencia_braquial = updatedPatient.circunferenciaBraquial;
+      if (updatedPatient.circunferenciaPantorrilla !== undefined) payload.circunferencia_pantorrilla = updatedPatient.circunferenciaPantorrilla;
       if (updatedPatient.diagnostico) payload.diagnostico = updatedPatient.diagnostico;
+      if (updatedPatient.discapacidadFisica !== undefined) payload.discapacidad_fisica = updatedPatient.discapacidadFisica;
+      if (updatedPatient.dificultadMasticacion !== undefined) payload.dificultad_masticacion = updatedPatient.dificultadMasticacion;
+      if (updatedPatient.observaciones !== undefined) payload.observaciones = updatedPatient.observaciones;
       if (updatedPatient.medicamentos) payload.medicamentos = updatedPatient.medicamentos;
 
       const { error } = await supabase.from('pacientes').update(payload).eq('id', id);
@@ -101,3 +116,4 @@ export const usePatientStore = create<PatientState>((set, get) => ({
     }
   },
 }));
+

@@ -3,30 +3,38 @@ import type { ClipboardEvent } from 'react';
 import { X, Image as ImageIcon, Check, Link as LinkIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useGuideStore } from '@/store/useGuideStore';
+import type { Guide as GuideType } from '@/store/useGuideStore';
 
 interface GuideFormModalProps {
   onClose: () => void;
   defaultTab?: 'clinica' | 'bpm';
+  guide?: GuideType;
 }
 
-export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, defaultTab = 'clinica' }) => {
+export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, defaultTab = 'clinica', guide }) => {
   const addGuide = useGuideStore(s => s.addGuide);
+  const updateGuide = useGuideStore(s => s.updateGuide);
   
-  const [tipo, setTipo] = useState<'clinica' | 'bpm'>(defaultTab);
-  const [titulo, setTitulo] = useState('');
-  const [contenido, setContenido] = useState('');
-  const [enlaceUrl, setEnlaceUrl] = useState('');
+  const [tipo, setTipo] = useState<'clinica' | 'bpm'>(guide ? guide.tipo : defaultTab);
+  const [titulo, setTitulo] = useState(guide ? guide.titulo : '');
+  const [contenido, setContenido] = useState(guide ? guide.contenido : '');
+  const [enlaceUrl, setEnlaceUrl] = useState(guide ? guide.enlace_url || '' : '');
   
+  // Estados para manejo de imágenes
+  const [existingImages, setExistingImages] = useState<string[]>(
+    guide && guide.imagenes_urls ? guide.imagenes_urls : []
+  );
+  const [deletedImagesUrls, setDeletedImagesUrls] = useState<string[]>([]);
   const [files, setFiles] = useState<File[]>([]);
-  const [previews, setPreviews] = useState<string[]>([]);
+  const [newPreviews, setNewPreviews] = useState<string[]>([]);
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const useRefInput = useRef<HTMLInputElement>(null);
 
   const addFiles = (newFiles: File[]) => {
     setFiles(prev => [...prev, ...newFiles]);
-    const newPreviews = newFiles.map(file => URL.createObjectURL(file));
-    setPreviews(prev => [...prev, ...newPreviews]);
+    const addedPreviews = newFiles.map(file => URL.createObjectURL(file));
+    setNewPreviews(prev => [...prev, ...addedPreviews]);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -55,11 +63,16 @@ export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, default
     }
   };
 
-  const removeImage = (index: number) => {
+  const removeExistingImage = (url: string) => {
+    setExistingImages(prev => prev.filter(img => img !== url));
+    setDeletedImagesUrls(prev => [...prev, url]);
+  };
+
+  const removeNewImage = (index: number) => {
     setFiles(prev => prev.filter((_, i) => i !== index));
-    setPreviews(prev => prev.filter((_, i) => i !== index));
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ''; // Reset input to allow re-selecting same file
+    setNewPreviews(prev => prev.filter((_, i) => i !== index));
+    if (useRefInput.current) {
+      useRefInput.current.value = ''; // Reset input to allow re-selecting same file
     }
   };
 
@@ -70,13 +83,30 @@ export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, default
 
     try {
       setIsSubmitting(true);
-      await addGuide({ 
-        tipo, 
-        titulo, 
-        contenido, 
-        enlace_url: enlaceUrl.trim() || undefined 
-      }, files);
-      toast.success('Norma guardada correctamente');
+      if (guide) {
+        await updateGuide(
+          guide.id,
+          {
+            tipo,
+            titulo,
+            contenido,
+            enlace_url: enlaceUrl.trim() || undefined,
+            imagenes_urls: existingImages
+          },
+          files,
+          deletedImagesUrls
+        );
+        toast.success('Registro actualizado correctamente');
+      } else {
+        await addGuide({ 
+          tipo, 
+          titulo, 
+          contenido, 
+          enlace_url: enlaceUrl.trim() || undefined,
+          imagenes_urls: []
+        }, files);
+        toast.success('Norma guardada correctamente');
+      }
       onClose();
     } catch (error) {
       console.error(error);
@@ -94,7 +124,7 @@ export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, default
       >
         <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
           <h2 className="text-xl md:text-2xl font-bold text-emerald-800 flex items-center gap-2">
-            Nuevo Protocolo / Norma
+            {guide ? 'Editar Protocolo / Norma' : 'Nuevo Protocolo / Norma'}
           </h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 p-1 rounded-full hover:bg-gray-100 transition-colors">
             <X size={24} />
@@ -162,11 +192,26 @@ export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, default
             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Imágenes / Infografías (Opcional)</label>
             
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
-              {previews.map((preview, idx) => (
-                <div key={idx} className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-100 aspect-square flex items-center justify-center group">
-                  <img src={preview} alt={`Preview ${idx + 1}`} className="max-h-full object-contain" />
+              {/* Imágenes existentes */}
+              {existingImages.map((img, idx) => (
+                <div key={`existing-${idx}`} className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-100 aspect-square flex items-center justify-center group">
+                  <img src={img} alt={`Existente ${idx + 1}`} className="max-h-full object-contain" />
                   <button 
-                    onClick={() => removeImage(idx)}
+                    onClick={() => removeExistingImage(img)}
+                    className="absolute top-2 right-2 bg-black/60 hover:bg-red-500 text-white p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+                    title="Quitar imagen"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+
+              {/* Previsualizaciones de nuevas imágenes */}
+              {newPreviews.map((preview, idx) => (
+                <div key={`new-${idx}`} className="relative rounded-xl overflow-hidden border border-gray-200 bg-gray-100 aspect-square flex items-center justify-center group">
+                  <img src={preview} alt={`Nueva previsualización ${idx + 1}`} className="max-h-full object-contain" />
+                  <button 
+                    onClick={() => removeNewImage(idx)}
                     className="absolute top-2 right-2 bg-black/60 hover:bg-red-500 text-white p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100"
                     title="Quitar imagen"
                   >
@@ -176,7 +221,7 @@ export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, default
               ))}
               
               <div 
-                onClick={() => fileInputRef.current?.click()}
+                onClick={() => useRefInput.current?.click()}
                 className="border-2 border-dashed border-gray-300 rounded-xl aspect-square flex flex-col items-center justify-center text-center cursor-pointer hover:bg-gray-50 hover:border-emerald-400 transition-colors bg-gray-50/50 p-2"
               >
                 <ImageIcon className="text-gray-400 mb-1" size={24} />
@@ -184,7 +229,7 @@ export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, default
                 <p className="text-[10px] text-gray-500 mt-1">O Ctrl+V</p>
                 <input 
                   type="file" 
-                  ref={fileInputRef} 
+                  ref={useRefInput} 
                   onChange={handleFileChange}
                   accept="image/*" 
                   multiple
@@ -209,11 +254,11 @@ export const GuideFormModal: React.FC<GuideFormModalProps> = ({ onClose, default
             className="flex-1 py-3 rounded-xl text-white font-semibold bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm flex justify-center items-center gap-2 disabled:opacity-50"
           >
             {isSubmitting ? (
-              <span className="animate-pulse">Guardando...</span>
+              <span className="animate-pulse">{guide ? 'Actualizando...' : 'Guardando...'}</span>
             ) : (
               <>
                 <Check size={20} />
-                Guardar Norma
+                {guide ? 'Guardar Cambios' : 'Guardar Norma'}
               </>
             )}
           </button>

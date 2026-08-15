@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BookOpen, ShieldCheck, Plus, Trash2, Activity, ArrowRight, Search, ArrowUpDown } from 'lucide-react';
+import { BookOpen, ShieldCheck, Plus, Trash2, Activity, ArrowRight, Search, ArrowUpDown, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useGuideStore } from '@/store/useGuideStore';
 import type { Guide as GuideType } from '@/store/useGuideStore';
@@ -9,9 +9,10 @@ interface GuideCardProps {
   guide: GuideType;
   onImageClick: (url: string) => void;
   onDelete: (id: string, urls?: string[]) => Promise<void>;
+  onEdit: (guide: GuideType) => void;
 }
 
-const GuideCard: React.FC<GuideCardProps> = ({ guide, onImageClick, onDelete }) => {
+const GuideCard: React.FC<GuideCardProps> = ({ guide, onImageClick, onDelete, onEdit }) => {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
@@ -42,19 +43,28 @@ const GuideCard: React.FC<GuideCardProps> = ({ guide, onImageClick, onDelete }) 
           <div>
             <h3 className="font-bold text-gray-800 text-lg leading-tight">{guide.titulo}</h3>
             <p className="text-xs text-gray-400">
-              {isClinica ? 'Dietoterapia Clínica' : 'Norma BPM'}
+              {isClinica ? 'Dietoterapia' : 'Norma BPM'}
             </p>
           </div>
         </div>
 
-        <button
-          onClick={handleDelete}
-          disabled={isDeleting}
-          className="text-gray-400 hover:text-red-500 p-1.5 rounded-xl hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
-          title="Eliminar"
-        >
-          <Trash2 size={18} />
-        </button>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onEdit(guide)}
+            className="text-gray-400 hover:text-emerald-600 p-1.5 rounded-xl hover:bg-emerald-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+            title="Editar"
+          >
+            <Pencil size={18} />
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={isDeleting}
+            className="text-gray-400 hover:text-red-500 p-1.5 rounded-xl hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+            title="Eliminar"
+          >
+            <Trash2 size={18} />
+          </button>
+        </div>
       </div>
 
       {/* Galería de imágenes en carrusel vertical o simple stack */}
@@ -108,6 +118,7 @@ const GuideCard: React.FC<GuideCardProps> = ({ guide, onImageClick, onDelete }) 
 export const Guide: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'clinica' | 'bpm'>('clinica');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingGuide, setEditingGuide] = useState<GuideType | null>(null);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'recientes' | 'alfabetico-az' | 'alfabetico-za'>('recientes');
@@ -172,7 +183,7 @@ export const Guide: React.FC = () => {
           }`}
         >
           <Activity size={18} />
-          Dietoterapia Clínica
+          Dietoterapia
         </button>
         <button
           onClick={() => handleTabChange('bpm')}
@@ -257,6 +268,7 @@ export const Guide: React.FC = () => {
                 guide={guide}
                 onImageClick={setFullscreenImage}
                 onDelete={deleteGuide}
+                onEdit={setEditingGuide}
               />
             ))}
           </div>
@@ -264,9 +276,13 @@ export const Guide: React.FC = () => {
       </section>
 
       {/* Modal Formulario */}
-      {isModalOpen && (
+      {(isModalOpen || editingGuide) && (
         <GuideFormModal 
-          onClose={() => setIsModalOpen(false)} 
+          guide={editingGuide || undefined}
+          onClose={() => {
+            setIsModalOpen(false);
+            setEditingGuide(null);
+          }} 
           defaultTab={activeTab}
         />
       )}

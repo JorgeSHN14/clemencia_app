@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { Package, AlertCircle, ArrowDownCircle, ArrowUpCircle, ClipboardList, Trash2, Search, ChevronDown, ChevronRight, Calendar, Settings } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { Package, AlertCircle, ArrowDownCircle, ArrowUpCircle, ClipboardList, Search, ChevronDown, ChevronRight, Calendar, Settings } from 'lucide-react';
 import { useInventoryStore } from '@/store/useInventoryStore';
 import type { Alimento, CategoriaAlimento } from '@/types';
 import { TransactionModal } from '@/components/inventory/TransactionModal';
@@ -15,7 +14,8 @@ const categorias: CategoriaAlimento[] = [
 ];
 
 export const Inventory: React.FC = () => {
-  const { items, removeItem, getExpiringItems } = useInventoryStore();
+  const items = useInventoryStore(state => state.items);
+  const getExpiringItems = useInventoryStore(state => state.getExpiringItems);
   
   // Modals state
   const [transactionMode, setTransactionMode] = useState<'ENTRADA' | 'SALIDA' | null>(null);
@@ -33,13 +33,6 @@ export const Inventory: React.FC = () => {
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
-
-  const handleDelete = (id: string) => {
-    if (confirm('¿Estás seguro de eliminar este producto y todo su historial?')) {
-      removeItem(id);
-      toast.success('Producto eliminado del sistema');
-    }
-  };
 
   const filteredItems = items.filter(item => {
     const matchesCategory = filterCategoria === 'Todas' || item.categoria === filterCategoria;
@@ -235,10 +228,6 @@ export const Inventory: React.FC = () => {
                             </button>
                             <button onClick={() => setKardexItemId(item.id)} className="p-1.5 md:p-2 text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition-all" title="Ver Kardex y Lotes">
                               <ClipboardList size={16} className="md:w-5 md:h-5" />
-                            </button>
-                            <div className="w-px h-5 md:h-6 bg-gray-200 mx-0.5 md:mx-1"></div>
-                            <button onClick={() => handleDelete(item.id)} className="p-1.5 md:p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors" title="Eliminar producto">
-                              <Trash2 size={14} className="md:w-[18px] md:h-[18px]" />
                             </button>
                           </div>
                         </td>

@@ -9,8 +9,16 @@ import { RecipeGenerator } from '@/pages/RecipeGenerator';
 import { Login } from '@/pages/Auth/Login';
 import { Register } from '@/pages/Auth/Register';
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute';
+import { useAuthStore } from '@/store/useAuthStore';
+import { useEffect } from 'react';
 
 function App() {
+  const { initialize } = useAuthStore();
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
+
   return (
     <BrowserRouter>
       <Toaster position="top-center" />

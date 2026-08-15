@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Activity, Lock, Mail } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/useAuthStore';
+
 
 export const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuthStore();
+  const location = useLocation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,23 +21,31 @@ export const Login: React.FC = () => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('verificar_login', {
-        p_email: email,
-        p_password_raw: password
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
       if (error) throw error;
 
-      if (data.success) {
-        login(data.user);
-        toast.success(`¡Bienvenido ${data.user.nombres}!`);
-        navigate('/inventory', { replace: true });
+      if (data.session) {
+        toast.success('Sesión iniciada exitosamente');
+        // The onAuthStateChange in App.tsx or useAuthStore will pick up the session automatically
+        
+        // Determinar a dónde redirigir
+        const from = location.state?.from?.pathname || '/inventory';
+        navigate(from, { replace: true });
       } else {
-        toast.error(data.error || 'Credenciales inválidas');
+        toast.error('Error al iniciar sesión');
       }
     } catch (err: any) {
-      console.error('Error logging in:', err);
-      toast.error('Ocurrió un error al intentar iniciar sesión');
+      console.error('Login error:', err);
+      // Mostrar mensajes amigables según el error de Supabase
+      if (err.message.includes('Invalid login credentials')) {
+        toast.error('Correo o contraseña incorrectos');
+      } else {
+        toast.error('Ocurrió un error inesperado al intentar iniciar sesión');
+      }
     } finally {
       setLoading(false);
     }

@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { Activity, User, Mail, Lock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
-import { useAuthStore } from '@/store/useAuthStore';
+
 
 export const Register: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -15,7 +15,6 @@ export const Register: React.FC = () => {
   });
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useAuthStore();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -43,36 +42,33 @@ export const Register: React.FC = () => {
 
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('registrar_usuario', {
-        p_nombres: formData.nombres,
-        p_apellidos: formData.apellidos,
-        p_email: formData.email,
-        p_password_raw: formData.password
+      const { data, error } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
+        options: {
+          data: {
+            nombres: formData.nombres,
+            apellidos: formData.apellidos,
+          }
+        }
       });
 
       if (error) throw error;
 
-      if (data.success) {
-        // Auto-login after registration
-        const loginRes = await supabase.rpc('verificar_login', {
-          p_email: formData.email,
-          p_password_raw: formData.password
-        });
-        
-        if (loginRes.data && loginRes.data.success) {
-          login(loginRes.data.user);
-          toast.success('Cuenta creada exitosamente');
-          navigate('/inventory', { replace: true });
-        } else {
-          toast.success('Cuenta creada exitosamente. Por favor, inicia sesión.');
-          navigate('/login');
-        }
+      if (data.session) {
+        toast.success('Cuenta creada exitosamente');
+        navigate('/inventory', { replace: true });
       } else {
-        toast.error(data.error || 'No se pudo crear la cuenta');
+        toast.success('Cuenta creada exitosamente. Por favor, revisa tu correo o inicia sesión.');
+        navigate('/login');
       }
     } catch (err: any) {
       console.error('Registration error:', err);
-      toast.error('Ocurrió un error al crear la cuenta');
+      if (err.message.includes('already registered')) {
+        toast.error('Este correo ya está registrado');
+      } else {
+        toast.error(err.message || 'Ocurrió un error al crear la cuenta');
+      }
     } finally {
       setLoading(false);
     }

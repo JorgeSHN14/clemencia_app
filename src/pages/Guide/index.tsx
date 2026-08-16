@@ -51,7 +51,7 @@ const GuideCard: React.FC<GuideCardProps> = ({ guide, onImageClick, onDelete, on
         <div className="flex items-center gap-1">
           <button
             onClick={() => onEdit(guide)}
-            className="text-gray-400 hover:text-emerald-600 p-1.5 rounded-xl hover:bg-emerald-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+            className="text-gray-400 hover:text-emerald-600 p-1.5 rounded-xl hover:bg-emerald-50 transition-colors md:opacity-0 group-hover:opacity-100 focus:opacity-100"
             title="Editar"
           >
             <Pencil size={18} />
@@ -59,7 +59,7 @@ const GuideCard: React.FC<GuideCardProps> = ({ guide, onImageClick, onDelete, on
           <button
             onClick={handleDelete}
             disabled={isDeleting}
-            className="text-gray-400 hover:text-red-500 p-1.5 rounded-xl hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
+            className="text-gray-400 hover:text-red-500 p-1.5 rounded-xl hover:bg-red-50 transition-colors md:opacity-0 group-hover:opacity-100 focus:opacity-100 disabled:opacity-50"
             title="Eliminar"
           >
             <Trash2 size={18} />

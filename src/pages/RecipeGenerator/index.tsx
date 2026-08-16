@@ -8,6 +8,7 @@ import type { CondicionClinica, Receta, Alimento } from '@/types';
 import { RecipeCard } from '@/components/recipe/RecipeCard';
 import { RecipeSkeletonLoader } from '@/components/recipe/RecipeSkeletonLoader';
 import { RecipeDetailView } from '@/components/recipe/RecipeDetailView';
+import { ManualRecipeCreator } from './ManualRecipeCreator';
 
 const patologiasDisponibles: CondicionClinica[] = [
   'Diabetes', 'Hipertensión', 'Dieta blanda',
@@ -36,7 +37,7 @@ export const RecipeGenerator: React.FC = () => {
   const { recipes, addGeneratedRecipe, removeRecipe } = useRecipeStore();
 
   // Navigation States
-  const [activeView, setActiveView] = useState<'recetario' | 'generador'>('recetario');
+  const [activeView, setActiveView] = useState<'recetario' | 'generador' | 'manual'>('recetario');
   const [loading, setLoading] = useState(false);
   const [recipe, setRecipe] = useState<Receta | null>(null); // Receta recién generada
   const [viewingRecipe, setViewingRecipe] = useState<Receta | null>(null); // Receta vista desde el grid
@@ -44,6 +45,9 @@ export const RecipeGenerator: React.FC = () => {
   // Generator States
   const [ingredientesCarrito, setIngredientesCarrito] = useState<Alimento[]>([]);
   const [patologiasSeleccionadas, setPatologiasSeleccionadas] = useState<CondicionClinica[]>([]);
+  const [targetPorciones, setTargetPorciones] = useState(1);
+  const [extraInput, setExtraInput] = useState('');
+  const [ingredientesExtra, setIngredientesExtra] = useState<string[]>([]);
   const [ingredientSearch, setIngredientSearch] = useState('');
   const [grupoFilter, setGrupoFilter] = useState<string>('Todos');
 
@@ -92,25 +96,80 @@ export const RecipeGenerator: React.FC = () => {
 
   const removeIngrediente = (id: string) => setIngredientesCarrito(prev => prev.filter(i => i.id !== id));
 
+  const addExtra = () => {
+    if (extraInput.trim() && !ingredientesExtra.includes(extraInput.trim())) {
+      setIngredientesExtra(prev => [...prev, extraInput.trim()]);
+      setExtraInput('');
+    }
+  };
+
+  const removeExtra = (ing: string) => setIngredientesExtra(prev => prev.filter(i => i !== ing));
+
   const handleGenerate = async () => {
     if (ingredientesCarrito.length === 0) return toast.error('Agrega al menos un ingrediente al carrito.');
     setLoading(true);
     setRecipe(null);
     try {
-      // Build enriched ingredient list with nutritional info
+      // Build enriched ingredient list with nutritional info and ID
       const ingredientesConInfo = ingredientesCarrito.map(item => {
-        let info = item.nombre;
-        if (item.caloriasPor100g !== undefined) {
-          info += ` (${item.caloriasPor100g}kcal, ${item.proteinasPor100g ?? 0}g Prot, ${item.carbohidratosPor100g ?? 0}g Carb, ${item.grasasPor100g ?? 0}g Grasa por 100${item.unidad === 'ml' ? 'ml' : 'g'})`;
-        }
+        let info = `${item.nombre} (ID_INVENTARIO: ${item.id}) - Stock Máximo Disponible: ${item.cantidadTotal} ${item.unidad}`;
         return info;
       });
 
-      const result = await generarRecetaIA({
+      const rawResult = await generarRecetaIA({
         inventarioDisponible: ingredientesConInfo,
         patologias: patologiasSeleccionadas.length > 0 ? patologiasSeleccionadas : ['Ninguna'],
+        porciones: targetPorciones,
+        ingredientesExtra: ingredientesExtra.length > 0 ? ingredientesExtra : undefined
       });
-      setRecipe(result);
+
+      // Calcular matemáticamente los macros locales para garantizar 100% de precisión
+      let totalCalorias = 0;
+      let totalProteinas = 0;
+      let totalCarbohidratos = 0;
+      let totalGrasas = 0;
+
+      const ingredientesCalculados = rawResult.ingredientes.map(ing => {
+        const alimentoDb = ingredientesCarrito.find(a => a.id === ing.id_inventario);
+        
+        // Si no tenemos un peso_en_gramos válido de la IA, asumimos 100 como fallback seguro (aunque no debería pasar)
+        const pesoCalculo = ing.peso_en_gramos && ing.peso_en_gramos > 0 ? ing.peso_en_gramos : 100;
+        const factor = pesoCalculo / 100;
+
+        let calorias = 0, proteinas = 0, carbohidratos = 0, grasas = 0;
+
+        if (alimentoDb && !ing.esExtra) {
+          calorias = (alimentoDb.caloriasPor100g || 0) * factor;
+          proteinas = (alimentoDb.proteinasPor100g || 0) * factor;
+          carbohidratos = (alimentoDb.carbohidratosPor100g || 0) * factor;
+          grasas = (alimentoDb.grasasPor100g || 0) * factor;
+
+          totalCalorias += calorias;
+          totalProteinas += proteinas;
+          totalCarbohidratos += carbohidratos;
+          totalGrasas += grasas;
+        }
+
+        return {
+          ...ing,
+          peso_en_gramos: pesoCalculo,
+          calorias: Math.round(calorias),
+          proteinas: Number(proteinas.toFixed(1)),
+          carbohidratos: Number(carbohidratos.toFixed(1)),
+          grasas: Number(grasas.toFixed(1))
+        };
+      });
+
+      const finalRecipe: Receta = {
+        ...rawResult,
+        ingredientes: ingredientesCalculados,
+        calorias: Math.round(totalCalorias),
+        proteinas: Number(totalProteinas.toFixed(1)),
+        carbohidratos: Number(totalCarbohidratos.toFixed(1)),
+        grasas: Number(totalGrasas.toFixed(1))
+      };
+
+      setRecipe(finalRecipe);
       toast.success('¡Menú generado con éxito!');
     } catch (error: any) {
       toast.error(error.message || 'Hubo un error al conectar con la IA.');
@@ -173,23 +232,34 @@ export const RecipeGenerator: React.FC = () => {
           </p>
         </div>
 
-        {activeView === 'recetario' ? (
-          <button
-            onClick={() => setActiveView('generador')}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white p-3 md:px-6 md:py-3 rounded-xl shadow-sm shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 flex-shrink-0 font-bold"
-          >
-            <Sparkles size={20} />
-            Generar Nueva Receta
-          </button>
-        ) : (
-          <button
-            onClick={() => setActiveView('recetario')}
-            className="bg-white border-2 border-gray-200 text-gray-600 hover:bg-gray-50 p-3 md:px-6 md:py-3 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 flex-shrink-0 font-bold"
-          >
-            <ArrowLeft size={20} />
-            Volver al Recetario
-          </button>
-        )}
+        <div className="flex gap-2">
+          {activeView === 'recetario' ? (
+            <>
+              <button
+                onClick={() => { setActiveView('manual'); window.scrollTo(0, 0); }}
+                className="bg-blue-600 hover:bg-blue-700 text-white p-3 md:px-4 md:py-3 rounded-xl shadow-sm shadow-blue-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 flex-shrink-0 font-bold text-sm"
+              >
+                <Plus size={18} />
+                <span className="hidden md:inline">Crear Manual</span>
+              </button>
+              <button
+                onClick={() => { setActiveView('generador'); window.scrollTo(0, 0); }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white p-3 md:px-4 md:py-3 rounded-xl shadow-sm shadow-emerald-500/20 transition-all active:scale-95 flex items-center justify-center gap-2 flex-shrink-0 font-bold text-sm"
+              >
+                <Sparkles size={18} />
+                <span className="hidden md:inline">Generar IA</span>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setActiveView('recetario')}
+              className="bg-white border-2 border-gray-200 text-gray-600 hover:bg-gray-50 p-3 md:px-4 md:py-3 rounded-xl transition-all active:scale-95 flex items-center justify-center gap-2 flex-shrink-0 font-bold text-sm"
+            >
+              <ArrowLeft size={18} />
+              <span className="hidden md:inline">Volver</span>
+            </button>
+          )}
+        </div>
       </header>
 
       {/* VISTA RECETARIO (Grid y Filtros) */}
@@ -294,10 +364,58 @@ export const RecipeGenerator: React.FC = () => {
               </div>
             </div>
 
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex flex-col sm:flex-row gap-6">
+              <div className="flex-1">
+                <label className="block text-sm font-black text-emerald-800 mb-2 uppercase tracking-wider">
+                  2. Porciones / Pacientes
+                </label>
+                <p className="text-xs text-gray-500 mb-3">La IA escalará la receta para esta cantidad.</p>
+                <input
+                  type="number"
+                  min="1"
+                  max="1000"
+                  value={targetPorciones}
+                  onChange={(e) => setTargetPorciones(parseInt(e.target.value) || 1)}
+                  className="w-full px-4 py-2 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 font-bold"
+                />
+              </div>
+
+              <div className="flex-1">
+                <label className="block text-sm font-black text-emerald-800 mb-2 uppercase tracking-wider">
+                  Ingredientes Extra
+                </label>
+                <p className="text-xs text-gray-500 mb-3">Opcional. Alimentos sin stock que permitirás usar.</p>
+                <div className="flex gap-2 mb-2">
+                  <input
+                    type="text"
+                    value={extraInput}
+                    onChange={(e) => setExtraInput(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && addExtra()}
+                    placeholder="Ej. Sal, Pimienta..."
+                    className="flex-1 px-3 py-2 bg-gray-50 border-2 border-gray-100 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+                  />
+                  <button
+                    onClick={addExtra}
+                    className="bg-gray-800 hover:bg-gray-700 text-white px-3 rounded-xl font-bold text-sm transition-colors"
+                  >
+                    Añadir
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {ingredientesExtra.map(extra => (
+                    <span key={extra} className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-xs font-bold flex items-center gap-1">
+                      {extra}
+                      <button onClick={() => removeExtra(extra)} className="hover:text-red-500 opacity-60 hover:opacity-100"><X size={12} /></button>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
               <label className="block text-sm font-black text-emerald-800 mb-4 uppercase tracking-wider flex items-center gap-2">
                 <Package size={16} />
-                2. Seleccionar Ingredientes del Inventario
+                3. Seleccionar Ingredientes del Inventario
               </label>
 
               {/* Search bar for ingredients */}
@@ -525,6 +643,11 @@ export const RecipeGenerator: React.FC = () => {
           context={(viewingRecipe as any).es_generada ? "Receta Guardada (IA)" : "Receta de la Fundación"}
           onClose={() => setViewingRecipe(null)}
         />
+      )}
+
+      {/* VISTA CREADOR MANUAL */}
+      {activeView === 'manual' && (
+        <ManualRecipeCreator onSuccess={() => setActiveView('recetario')} />
       )}
 
     </div>

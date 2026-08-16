@@ -70,10 +70,17 @@ export interface Alimento {
 }
 
 export interface IngredienteReceta {
+  id_inventario?: string;
   nombre: string;
   cantidad: number;
   unidad: string;
+  peso_en_gramos?: number;
+  calorias?: number;
+  proteinas?: number;
+  grasas?: number;
+  carbohidratos?: number;
   sustitutoSugerido?: string;
+  esExtra?: boolean;
 }
 
 export interface Macronutrientes {
@@ -90,6 +97,8 @@ export interface Receta {
   porciones: number;
   calorias: number;
   proteinas: number; // en gramos
+  carbohidratos?: number; // en gramos
+  grasas?: number; // en gramos
   macros?: Macronutrientes;
   aptoPara: CondicionClinica[];
   imagenUrl?: string; // Para mejor estética

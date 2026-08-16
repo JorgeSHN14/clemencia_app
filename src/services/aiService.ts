@@ -4,6 +4,8 @@ import type { CondicionClinica, Receta } from '@/types';
 export interface GenerarRecetaParams {
   inventarioDisponible: string[];
   patologias: CondicionClinica[];
+  porciones: number;
+  ingredientesExtra?: string[];
 }
 
 export const generarRecetaIA = async (params: GenerarRecetaParams): Promise<Receta> => {
@@ -17,16 +19,40 @@ export const generarRecetaIA = async (params: GenerarRecetaParams): Promise<Rece
     apiKey: apiKey,
   });
 
-  const promptText = `DEVUELVE ÚNICAMENTE EL CÓDIGO JSON. CERO TEXTO CONVERSACIONAL ANTES O DESPUÉS. PROHIBIDO SALUDAR O EXPLICAR.
-Crea una receta en JSON estricto. SOLO puedes usar estos ingredientes (con su información nutricional por 100g/100ml entre paréntesis): ${params.inventarioDisponible.join('; ')}.
-Restricciones clínicas a cumplir: ${params.patologias.join(', ')}.
+  const promptText = `DEVUELVE ÚNICAMENTE EL CÓDIGO JSON. CERO TEXTO CONVERSACIONAL ANTES O DESPUÉS.
+Eres el Nutricionista Clínico Jefe de un hospital de alta especialidad. Tu tarea es diseñar una receta terapéutica impecable aplicando los estándares internacionales de dietoterapia más rigurosos (ADA, ESPEN, ASPEN, etc.) para la siguiente condición clínica: ${params.patologias.join(', ')}.
+
+IMPORTANTE: La receta debe estar calculada EXACTAMENTE para ${params.porciones} porciones/personas.
+
+INVENTARIO DISPONIBLE EN STOCK (Prioriza estos ingredientes):
+${params.inventarioDisponible.join(';\n')}
+
+${params.ingredientesExtra && params.ingredientesExtra.length > 0 ? `INGREDIENTES EXTRA PERMITIDOS (Puedes usar estos si es necesario para completar la receta, aunque no estén en stock): \n${params.ingredientesExtra.join(', ')}` : ''}
+
 REGLAS ESTRICTAS:
-- SOLO usa los ingredientes proporcionados, NO inventes ni agregues otros.
-- Calcula las calorías y macronutrientes basándote en los datos nutricionales proporcionados y las cantidades que asignes a cada ingrediente.
-- Los pasos deben ser muy detallados. NO uses prefijos como "Paso 1:" ni números en el procedimiento. Redacta solo la acción.
-- Las cantidades de ingredientes deben ser realistas para una preparación.
+1. SOLO usa los ingredientes proporcionados en el INVENTARIO o en los INGREDIENTES EXTRA. NO inventes sal, agua o aceite si no están en la lista (asume que el paciente solo puede comer lo que hay aquí).
+2. Toma decisiones clínicas brillantes. Si la condición médica prohíbe un alimento, NO LO USES bajo ninguna circunstancia.
+3. El inventario incluye el stock máximo disponible. Intenta no pasarte de ese stock si es posible, pero si las ${params.porciones} porciones lo requieren estrictamente, puedes pasarte.
+4. Cantidades y unidades: Expresa la "cantidad" en la "unidad" original del ingrediente. ADEMÁS, estima OBLIGATORIAMENTE el "peso_en_gramos" aproximado de esa cantidad. Si la unidad original ya es 'g' o 'ml', el peso_en_gramos debe ser el mismo número.
+5. PROCEDIMIENTO UNIVERSAL: Los pasos de preparación NO DEBEN INCLUIR NÚMEROS O CANTIDADES EXACTAS (ej: prohibido decir "agrega 100g de harina", en su lugar di "agrega la harina"). Esto es porque el sistema escalará las cantidades dinámicamente y el texto no debe perder sentido.
+6. NO calcules calorías ni macronutrientes. Eso lo haremos matemáticamente nosotros en el sistema.
+
 Formato JSON obligatorio:
-{"titulo":"","ingredientes":[{"nombre":"","cantidad":100,"unidad":"g"}],"procedimiento":["Detalle de la accion","Siguiente accion"],"porciones":2,"calorias":350,"proteinas":25}`;
+{
+  "titulo": "Nombre de la Receta",
+  "ingredientes": [
+    {
+      "id_inventario": "ID_DEL_INGREDIENTE_AQUI (vacío si es ingrediente extra)",
+      "nombre": "Nombre del ingrediente",
+      "cantidad": 1,
+      "unidad": "unidades",
+      "peso_en_gramos": 150,
+      "esExtra": false
+    }
+  ],
+  "procedimiento": ["Picar finamente los ingredientes...", "Hervir..."],
+  "porciones": ${params.porciones}
+}`;
 
   // Configuración adaptada a tu formato
   const generationConfig = {
@@ -72,8 +98,10 @@ Formato JSON obligatorio:
         ingredientes: receta.ingredientes,
         procedimiento: receta.procedimiento,
         porciones: receta.porciones,
-        calorias: receta.calorias,
-        proteinas: receta.proteinas,
+        calorias: 0, // Se calculará en el frontend
+        proteinas: 0, // Se calculará en el frontend
+        carbohidratos: 0, // Se calculará en el frontend
+        grasas: 0, // Se calculará en el frontend
         aptoPara: params.patologias.filter(p => p !== 'Ninguna'),
       } as Receta;
     } catch (parseError) {

@@ -22,7 +22,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           .from('usuarios')
           .select('*')
           .eq('id', session.user.id)
-          .single();
+          .maybeSingle();
 
         if (data) {
           set({ user: data as Usuario, loading: false });

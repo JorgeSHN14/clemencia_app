@@ -20,6 +20,7 @@ interface InventoryState {
   registrarConsumo: (id: string, cantidadA_Consumir: number, motivo?: string) => Promise<void>;
   registrarAjuste: (alimentoId: string, loteId: string, nuevaCantidad: number, motivo: string) => Promise<void>;
   removeItem: (id: string) => Promise<void>;
+  toggleUnidad: (id: string) => Promise<void>;
   getExpiringItems: () => { alimento: Alimento, lote: Lote, daysLeft: number }[];
 }
 
@@ -230,6 +231,28 @@ export const useInventoryStore = create<InventoryState>((set, get) => ({
       await get().fetchInventory();
     } catch (error) {
       console.error('Error removeItem', error);
+      throw error;
+    }
+  },
+
+  toggleUnidad: async (id) => {
+    try {
+      const { items } = get();
+      const item = items.find(i => i.id === id);
+      if (!item) throw new Error('Item no encontrado');
+
+      const nuevaUnidad = item.unidad === 'g' ? 'ml' : 'g';
+
+      const { error } = await supabase
+        .from('alimentos')
+        .update({ unidad: nuevaUnidad })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      await get().fetchInventory();
+    } catch (error) {
+      console.error('Error toggleUnidad', error);
       throw error;
     }
   },

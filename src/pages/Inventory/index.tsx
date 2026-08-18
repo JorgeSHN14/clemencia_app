@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { Package, AlertCircle, ArrowDownCircle, ArrowUpCircle, ClipboardList, Search, ChevronDown, ChevronRight, Calendar, Settings } from 'lucide-react';
+import React, { useState, useDeferredValue, useMemo } from 'react';
+import toast from 'react-hot-toast';
+import { Package, AlertCircle, ArrowDownCircle, ArrowUpCircle, ClipboardList, Search, ChevronDown, ChevronRight, Calendar, Settings, Loader2 } from 'lucide-react';
 import { useInventoryStore } from '@/store/useInventoryStore';
 import type { Alimento, CategoriaAlimento } from '@/types';
 import { TransactionModal } from '@/components/inventory/TransactionModal';
@@ -16,6 +17,7 @@ const categorias: CategoriaAlimento[] = [
 export const Inventory: React.FC = () => {
   const items = useInventoryStore(state => state.items);
   const getExpiringItems = useInventoryStore(state => state.getExpiringItems);
+  const toggleUnidad = useInventoryStore(state => state.toggleUnidad);
   
   // Modals state
   const [transactionMode, setTransactionMode] = useState<'ENTRADA' | 'SALIDA' | null>(null);
@@ -28,17 +30,61 @@ export const Inventory: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   // Expandable lot rows
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [togglingUnitId, setTogglingUnitId] = useState<string | null>(null);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+
+  const toggleGroup = (group: string) => setCollapsedGroups(prev => {
+    const next = new Set(prev);
+    if (next.has(group)) next.delete(group); else next.add(group);
+    return next;
+  });
+
   const toggleRow = (id: string) => setExpandedRows(prev => {
     const next = new Set(prev);
     if (next.has(id)) next.delete(id); else next.add(id);
     return next;
   });
 
-  const filteredItems = items.filter(item => {
-    const matchesCategory = filterCategoria === 'Todas' || item.categoria === filterCategoria;
-    const matchesSearch = item.nombre.toLowerCase().includes(searchTerm.toLowerCase());
-    return matchesCategory && matchesSearch;
-  });
+  const handleToggleUnidad = async (item: Alimento) => {
+    const nextUnit = item.unidad === 'g' ? 'ml' : 'g';
+    if (!window.confirm(`¿Estás seguro de cambiar la unidad de medida de ${item.nombre} a ${nextUnit}?`)) {
+      return;
+    }
+
+    setTogglingUnitId(item.id);
+    const toastId = toast.loading(`Cambiando unidad a ${nextUnit}...`);
+    try {
+      await toggleUnidad(item.id);
+      toast.success(`Unidad cambiada correctamente a ${nextUnit}`, { id: toastId });
+    } catch (error) {
+      toast.error('Error al cambiar la unidad', { id: toastId });
+    } finally {
+      setTogglingUnitId(null);
+    }
+  };
+
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+
+  const filteredItems = useMemo(() => {
+    return items.filter(item => {
+      const matchesCategory = filterCategoria === 'Todas' || item.categoria === filterCategoria;
+      const matchesSearch = item.nombre.toLowerCase().includes(deferredSearchTerm.toLowerCase());
+      return matchesCategory && matchesSearch;
+    });
+  }, [items, filterCategoria, deferredSearchTerm]);
+
+  const groupedItems = useMemo(() => {
+    return filteredItems.reduce((acc, item) => {
+      const group = item.grupoAlimento || 'Sin Grupo';
+      if (!acc[group]) acc[group] = [];
+      acc[group].push(item);
+      return acc;
+    }, {} as Record<string, Alimento[]>);
+  }, [filteredItems]);
+
+  const sortedGroups = useMemo(() => {
+    return Object.keys(groupedItems).sort((a, b) => a.localeCompare(b));
+  }, [groupedItems]);
 
   const expiringItemsCount = getExpiringItems().length;
 
@@ -97,23 +143,25 @@ export const Inventory: React.FC = () => {
       )}
 
       {/* Barra de Filtros y Búsqueda */}
-      <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100 flex flex-col md:flex-row gap-3">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex flex-col xl:flex-row gap-4 items-center">
+        <div className="relative w-full xl:max-w-md flex-shrink-0">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search className="text-gray-400" size={18} />
+          </div>
           <input 
             type="text" 
-            placeholder="Buscar producto..."
+            placeholder="Buscar producto por nombre..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-2 focus:ring-emerald-500 font-medium text-sm"
+            className="w-full pl-10 pr-4 py-2.5 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all font-medium text-sm text-gray-700 placeholder-gray-400"
           />
         </div>
         
-        <div className="flex gap-2 w-full md:w-auto overflow-x-auto pb-1 scrollbar-hide items-center">
+        <div className="flex gap-2 w-full overflow-x-auto pb-2 xl:pb-0 scrollbar-hide items-center flex-nowrap">
           <button
             onClick={() => setFilterCategoria('Todas')}
-            className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap transition-colors ${
-              filterCategoria === 'Todas' ? 'bg-gray-800 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            className={`px-4 py-2 text-xs font-bold rounded-xl whitespace-nowrap transition-all flex-shrink-0 ${
+              filterCategoria === 'Todas' ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:border-gray-300'
             }`}
           >
             Todas
@@ -122,8 +170,8 @@ export const Inventory: React.FC = () => {
             <button
               key={c}
               onClick={() => setFilterCategoria(c)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-lg whitespace-nowrap transition-colors ${
-                filterCategoria === c ? 'bg-gray-800 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+              className={`px-4 py-2 text-xs font-bold rounded-xl whitespace-nowrap transition-all flex-shrink-0 ${
+                filterCategoria === c ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20' : 'bg-gray-50 border border-gray-200 text-gray-600 hover:bg-gray-100 hover:border-gray-300'
               }`}
             >
               {c}
@@ -149,11 +197,33 @@ export const Inventory: React.FC = () => {
             <tbody>
               {filteredItems.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="p-8 text-center text-gray-500">No se encontraron productos en el inventario.</td>
+                  <td colSpan={6} className="p-8 text-center text-gray-500">No se encontraron productos en el inventario.</td>
                 </tr>
               ) : (
-                filteredItems.map(item => {
-                  // Determinar si algún lote activo está por vencer
+                sortedGroups.map(group => (
+                  <React.Fragment key={group}>
+                    <tr 
+                      className="bg-gray-100/80 hover:bg-gray-200/80 border-y border-gray-200 cursor-pointer transition-colors group/header"
+                      onClick={() => toggleGroup(group)}
+                    >
+                      <td colSpan={6} className="px-3 md:px-4 py-2.5 text-xs md:text-sm font-bold text-gray-700 tracking-wider uppercase">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            {group} 
+                            <span className="bg-white px-2 py-0.5 rounded-full text-[10px] text-gray-500 border border-gray-200 shadow-sm normal-case">
+                              {groupedItems[group].length} {groupedItems[group].length === 1 ? 'producto' : 'productos'}
+                            </span>
+                          </span>
+                          <span className="p-1 rounded-md bg-white border border-gray-200 text-gray-400 group-hover/header:text-gray-600 group-hover/header:border-gray-300 transition-colors shadow-sm">
+                            {collapsedGroups.has(group) ? <ChevronRight size={14} /> : <ChevronDown size={14} />}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                    {!collapsedGroups.has(group) && groupedItems[group]
+                      .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                      .map(item => {
+                        // Determinar si algún lote activo está por vencer
                   const isExpiring = item.lotes.some(l => {
                     if (l.cantidadRestante <= 0 || !l.fechaVencimiento) return false;
                     const daysLeft = (new Date(l.fechaVencimiento).getTime() - new Date().getTime()) / (1000 * 3600 * 24);
@@ -193,9 +263,22 @@ export const Inventory: React.FC = () => {
                           <p className="text-[10px] text-gray-400 mt-0.5">{lotesActivos.length} lote{lotesActivos.length !== 1 ? 's' : ''} activo{lotesActivos.length !== 1 ? 's' : ''}</p>
                         </td>
                         <td className="p-2 md:p-3">
-                          <span className={`text-sm md:text-base font-bold ${item.cantidadTotal <= 0 ? 'text-red-500' : 'text-emerald-600'}`}>
-                            {item.cantidadTotal} <span className="text-[10px] font-semibold text-gray-400 uppercase">{item.unidad}</span>
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm md:text-base font-bold ${item.cantidadTotal <= 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                              {item.cantidadTotal} <span className="text-[10px] font-semibold text-gray-400 uppercase">{item.unidad}</span>
+                            </span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleToggleUnidad(item);
+                              }}
+                              disabled={togglingUnitId === item.id}
+                              className="text-[10px] bg-gray-100 hover:bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 disabled:opacity-50"
+                              title={`Cambiar a ${item.unidad === 'g' ? 'ml' : 'g'}`}
+                            >
+                              {togglingUnitId === item.id ? <Loader2 size={10} className="animate-spin" /> : '⇄'} {item.unidad === 'g' ? 'ml' : 'g'}
+                            </button>
+                          </div>
                         </td>
                         <td className="p-2 md:p-3">
                           <div className="flex flex-col gap-1 items-start">
@@ -298,7 +381,9 @@ export const Inventory: React.FC = () => {
                       )}
                     </React.Fragment>
                   );
-                })
+                })}
+                  </React.Fragment>
+                ))
               )}
             </tbody>
           </table>
